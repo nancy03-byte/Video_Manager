@@ -16,16 +16,19 @@
 
         <!-- Filters Section -->
         <div class="filters-section">
-            <div class="filter-group">
-                <label for="nameFilter">Filter by Name:</label>
-                <select id="nameFilter">
-                    <option value="">All Stars</option>
-                </select>
+            <div class="filter-group search-group">
+                <label for="searchInput">Search Stars:</label>
+                <input type="text" id="searchInput" placeholder="Search by star name">
             </div>
 
-            <div class="filter-group checkboxes-group">
-                <label>Filter by Selection:</label>
-                <div id="checkboxContainer" class="checkbox-container"></div>
+            <div class="filter-group">
+                <label for="starFilter">Filter by Stars:</label>
+                <select id="starFilter" multiple size="4"></select>
+            </div>
+
+            <div class="filter-group">
+                <label for="siteFilter">Filter by Site:</label>
+                <select id="siteFilter" multiple size="4"></select>
             </div>
 
             <button class="btn btn-reset" id="resetFiltersBtn">Reset Filters</button>

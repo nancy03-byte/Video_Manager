@@ -8,6 +8,8 @@ const deleteStarBtn = document.getElementById('deleteStarBtn');
 const addMovieModal = document.getElementById('addMovieModal');
 const closeMovieModal = document.getElementById('closeMovieModal');
 const addMovieForm = document.getElementById('addMovieForm');
+const movieSiteFilter = document.getElementById('movieSiteFilter');
+const resetMovieFiltersBtn = document.getElementById('resetMovieFiltersBtn');
 const starImage = document.getElementById('starImage');
 const starNameElement = document.getElementById('starName');
 const starTitle = document.getElementById('starTitle');
@@ -17,6 +19,7 @@ const moviesGrid = document.getElementById('moviesGrid');
 // Global data
 let currentStar = null;
 let starsData = [];
+let filteredMovies = [];
 let slideShowIntervals = {};
 let editingMovieIndex = null;
 
@@ -37,44 +40,44 @@ function setupEventListeners() {
     deleteStarBtn.addEventListener('click', deleteStar);
     closeMovieModal.addEventListener('click', closeModal);
     addMovieForm.addEventListener('submit', handleAddMovie);
+    movieSiteFilter.addEventListener('change', applyMovieFilters);
+    resetMovieFiltersBtn.addEventListener('click', resetMovieFilters);
     window.addEventListener('click', (e) => {
         if (e.target === addMovieModal) closeModal();
     });
 }
 
-// Load data from API or localStorage
 async function loadData() {
     try {
-        // Try to load from API first (if server is running)
         const response = await fetch(`${API_URL}/stars`);
         if (response.ok) {
             starsData = await response.json();
             localStorage.setItem('starsData', JSON.stringify(starsData));
-        } else {
-            loadFromLocalStorage();
+            return;
         }
     } catch (error) {
         console.log('Server not running, loading from localStorage...');
-        loadFromLocalStorage();
     }
+
+    await loadFromLocalStorage();
 }
 
 // Load from localStorage fallback
-function loadFromLocalStorage() {
+async function loadFromLocalStorage() {
     const savedData = localStorage.getItem('starsData');
     if (savedData) {
         starsData = JSON.parse(savedData);
-    } else {
-        try {
-            fetch('data.json')
-                .then(res => res.json())
-                .then(data => {
-                    starsData = data.stars;
-                    localStorage.setItem('starsData', JSON.stringify(starsData));
-                });
-        } catch (error) {
-            console.error('Error loading data.json:', error);
-        }
+        return;
+    }
+
+    try {
+        const response = await fetch('data.json');
+        const data = await response.json();
+        starsData = data.stars;
+        localStorage.setItem('starsData', JSON.stringify(starsData));
+    } catch (error) {
+        console.error('Error loading data.json:', error);
+        starsData = [];
     }
 }
 
@@ -95,147 +98,310 @@ function loadStarDetails(starId) {
     starImage.onerror = () => {
         starImage.src = 'https://via.placeholder.com/250x300?text=Image+Not+Found';
     };
+
+    updateMovieCount();
+    populateMovieFilters();
+    applyMovieFilters();
+}
+
+function updateMovieCount() {
     movieCount.textContent = `${currentStar.movies.length} movie${currentStar.movies.length !== 1 ? 's' : ''}`;
+}
+
+function splitCommaSeparated(value) {
+    return value ? value.split(',').map(item => item.trim()).filter(Boolean) : [];
+}
+
+function getSelectedValues(selectElement) {
+    return Array.from(selectElement.selectedOptions).map(option => option.value);
+}
+
+function clearMultiSelect(selectElement) {
+    Array.from(selectElement.options).forEach(option => {
+        option.selected = false;
+    });
+}
+
+function getMovieSiteValues(movies) {
+    const sites = Array.isArray(movies)
+        ? movies
+            .map(movie => movie.siteName || movie.siteNameLink || movie.siteUrl || '')
+            .filter(Boolean)
+        : [];
+
+    return Array.from(new Set(sites));
+}
+
+// Utility: Extract domain name from URL or plain domain
+function extractDomainName(value) {
+    if (!value) {
+        return 'Site';
+    }
+
+    try {
+        const normalizedValue = value.includes('://') ? value : `https://${value}`;
+        const urlObj = new URL(normalizedValue);
+        const hostname = urlObj.hostname.replace(/^www\./i, '');
+        const parts = hostname.split('.').filter(Boolean);
+        const domainPart = parts.length >= 2 ? parts[parts.length - 2] : parts[0] || hostname;
+        return domainPart.charAt(0).toUpperCase() + domainPart.slice(1);
+    } catch (error) {
+        const cleanValue = value.replace(/^www\./i, '');
+        const parts = cleanValue.split('.').filter(Boolean);
+        const domainPart = parts.length >= 2 ? parts[parts.length - 2] : parts[0] || cleanValue;
+        return domainPart.charAt(0).toUpperCase() + domainPart.slice(1);
+    }
+}
+
+function getLinkValue(url) {
+    return url.includes('://') ? url : `https://${url}`;
+}
+
+function populateMovieFilters() {
+    movieSiteFilter.innerHTML = '';
+
+    const siteOptions = Array.from(
+        new Map(
+            getMovieSiteValues(currentStar.movies)
+                .map(site => [site, extractDomainName(site)])
+        ).entries()
+    )
+        .map(([value, label]) => ({ value, label }))
+        .sort((a, b) => a.label.localeCompare(b.label));
+
+    siteOptions.forEach(site => {
+        const option = document.createElement('option');
+        option.value = site.value;
+        option.textContent = site.label;
+        movieSiteFilter.appendChild(option);
+    });
+}
+
+function applyMovieFilters() {
+    const selectedSites = new Set(getSelectedValues(movieSiteFilter));
+
+    filteredMovies = currentStar.movies.filter(movie => {
+        const movieSites = getMovieSiteValues([movie]);
+        const matchesSites =
+            selectedSites.size === 0 ||
+            movieSites.some(site => selectedSites.has(site));
+
+        return matchesSites;
+    });
 
     renderMovies();
 }
 
-// Utility: Extract domain name from URL
-function extractDomainName(url) {
-    try {
-        const urlObj = new URL(url);
-        let domain = urlObj.hostname.replace('www.', '');
-        domain = domain.split('.')[0]; // Get first part before TLD
-        return domain.charAt(0).toUpperCase() + domain.slice(1);
-    } catch (e) {
-        return 'Site';
-    }
+function resetMovieFilters() {
+    clearMultiSelect(movieSiteFilter);
+    applyMovieFilters();
 }
 
-// Render movies grid
+function createThumbnail(movie, index) {
+    const images = splitCommaSeparated(movie.images);
+    const previewUrls = splitCommaSeparated(movie.previewVideoUrl);
+    const previewUrl = previewUrls[0] || '';
+    const hasImages = images.length > 0;
+    const hasPreview = Boolean(previewUrl);
+
+    if (hasImages) {
+        const slidesHTML = images.map((img, imgIndex) => `
+            <div class="slide ${imgIndex === 0 ? 'active' : ''}" style="opacity: ${imgIndex === 0 ? '1' : '0'};">
+                <img src="${img}" alt="Movie image ${imgIndex + 1}" onerror="this.src='https://via.placeholder.com/300x180?text=Image+Not+Found'">
+            </div>
+        `).join('');
+
+        const previewVideoHTML = hasPreview ? `
+            <video class="preview-video-element" muted loop playsinline preload="metadata">
+                <source src="${previewUrl}" type="video/mp4">
+            </video>
+        ` : '';
+
+        return `
+            <div class="movie-thumbnail image-slideshow${hasPreview ? ' has-preview' : ''}" data-movie-index="${index}" data-has-images="true" data-has-preview="${hasPreview}">
+                <div class="slideshow-container">
+                    ${slidesHTML}
+                    ${previewVideoHTML}
+                </div>
+            </div>
+        `;
+    }
+
+    if (hasPreview) {
+        return `
+            <div class="movie-thumbnail preview-video" data-movie-index="${index}" data-has-images="false" data-has-preview="true">
+                <video class="preview-video-element preview-video-autoplay" muted loop playsinline autoplay preload="metadata">
+                    <source src="${previewUrl}" type="video/mp4">
+                </video>
+            </div>
+        `;
+    }
+
+    return `
+        <div class="movie-thumbnail generic-video" data-movie-index="${index}" data-has-images="false" data-has-preview="false">
+            <div class="video-icon">▶</div>
+            <div class="video-text">No Preview</div>
+        </div>
+    `;
+}
+
+function createFixedButtonRow(className, buttonsHTML, placeholderLabel) {
+    return `
+        <div class="movie-buttons-row fixed-row ${className}">
+            ${buttonsHTML || `<button class="btn-placeholder" type="button" disabled aria-disabled="true">${placeholderLabel}</button>`}
+        </div>
+    `;
+}
+
 function renderMovies() {
     moviesGrid.innerHTML = '';
 
-    if (currentStar.movies.length === 0) {
-        moviesGrid.innerHTML = '<div class="empty-state" style="grid-column: 1/-1;"><p>No movies added yet. Click "Add Movie" to get started!</p></div>';
+    const movies = Array.isArray(filteredMovies) ? filteredMovies : [];
+
+    if (movies.length === 0) {
+        moviesGrid.innerHTML = '<div class="empty-state" style="grid-column: 1/-1;"><p>No movies match the selected site filter.</p></div>';
         return;
     }
 
-    currentStar.movies.forEach((movie, index) => {
+    movies.forEach((movie, index) => {
         const movieCard = document.createElement('div');
         movieCard.className = 'movie-card';
 
-        // Parse images
-        const images = movie.images ? movie.images.split(',').map(img => img.trim()).filter(img => img) : [];
+        const images = splitCommaSeparated(movie.images);
+        const previewUrls = splitCommaSeparated(movie.previewVideoUrl);
+        const watchUrls = splitCommaSeparated(movie.videoUrl);
+        const siteLink = getLinkValue(movie.siteName || '');
+        const siteDomain = extractDomainName(movie.siteName || movie.siteNameLink || movie.siteUrl || '');
+        const previewUrl = previewUrls[0] || '';
 
-        // Parse URLs
-        const previewUrls = movie.previewVideoUrl ? movie.previewVideoUrl.split(',').map(url => url.trim()).filter(url => url) : [];
-        const watchUrls = movie.videoUrl ? movie.videoUrl.split(',').map(url => url.trim()).filter(url => url) : [];
+        const siteButtonHTML = createFixedButtonRow(
+            'site-button-row',
+            `<button class="btn-site" data-open-url="${siteLink}">${siteDomain}</button>`,
+            'Site'
+        );
 
-        // Extract site name for button
-        const siteDomain = extractDomainName(movie.siteName.includes('http') ? movie.siteName : `https://${movie.siteName}`);
+        const previewButtonsHTML = createFixedButtonRow(
+            'preview-button-row',
+            previewUrls.length > 0
+                ? previewUrls.map(() => `<button class="btn-preview" data-open-url="${previewUrl || '#'}">Preview</button>`).join('')
+                : '',
+            'Preview'
+        );
 
-        // Build thumbnail HTML
-        let thumbnailHTML = '';
-        if (images.length > 0) {
-            let slidesHTML = images.map((img, imgIndex) => `
-                <div class="slide ${imgIndex === 0 ? 'active' : ''}" style="opacity: ${imgIndex === 0 ? '1' : '0'};">
-                    <img src="${img}" alt="Movie image ${imgIndex + 1}" onerror="this.src='https://via.placeholder.com/300x180?text=Image+Not+Found'">
-                </div>
-            `).join('');
+        const watchButtonsHTML = createFixedButtonRow(
+            'video-button-row',
+            watchUrls.length > 0
+                ? watchUrls.map(url => `<button class="btn-watch" data-open-url="${url}">Video</button>`).join('')
+                : '',
+            'Video'
+        );
 
-            thumbnailHTML = `
-                <div class="movie-thumbnail image-slideshow" data-movie-index="${index}">
-                    <div class="slideshow-container">
-                        ${slidesHTML}
-                        <div class="video-preview-overlay">
-                            <div class="video-icon">▶</div>
-                            <div class="video-text">Play Video</div>
-                        </div>
-                    </div>
-                </div>
-            `;
-
-            setTimeout(() => startSlideshow(index), 100);
-        } else {
-            thumbnailHTML = `
-                <div class="movie-thumbnail generic-video">
-                    <div class="video-icon">▶</div>
-                    <div class="video-text">${siteDomain}</div>
-                </div>
-            `;
-        }
-
-        // Build buttons HTML
-        let buttonsHTML = `
-            <div class="movie-buttons-row site-button-row">
-                <button class="btn-site" onclick="openInNewTab('${movie.siteName.includes('http') ? movie.siteName : 'https://' + movie.siteName}')">${siteDomain}</button>
-            </div>
-        `;
-
-        // Add preview video buttons
-        if (previewUrls.length > 0) {
-            buttonsHTML += '<div class="movie-buttons-row">';
-            previewUrls.forEach(url => {
-                const domain = extractDomainName(url);
-                buttonsHTML += `<button class="btn-preview" onclick="openInNewTab('${url}')">Preview: ${domain}</button>`;
-            });
-            buttonsHTML += '</div>';
-        }
-
-        // Add watch video buttons
-        if (watchUrls.length > 0) {
-            buttonsHTML += '<div class="movie-buttons-row">';
-            watchUrls.forEach(url => {
-                const domain = extractDomainName(url);
-                buttonsHTML += `<button class="btn-watch" onclick="openInNewTab('${url}')">Watch: ${domain}</button>`;
-            });
-            buttonsHTML += '</div>';
-        }
-
-        // Add edit/delete buttons
-        buttonsHTML += `
-            <div class="movie-buttons-row action-buttons-row">
-                <button class="btn-edit" onclick="editMovie(${index})">Edit</button>
-                <button class="btn-delete-movie" onclick="deleteMovie(${index})">Delete</button>
+        const actionButtonsHTML = `
+            <div class="movie-buttons-row action-buttons-row fixed-row">
+                <button class="btn-edit" data-edit-index="${index}">Edit</button>
+                <button class="btn-delete-movie" data-delete-index="${index}">Delete</button>
             </div>
         `;
 
         movieCard.innerHTML = `
-            ${thumbnailHTML}
+            ${createThumbnail(movie, index)}
             <div class="movie-info">
                 <h4>${movie.videoTitle}</h4>
-                ${images.length > 0 ? `<p><strong>Images:</strong> ${images.length} image${images.length !== 1 ? 's' : ''}</p>` : ''}
-                ${buttonsHTML}
+                ${images.length > 0 ? `<p><strong>Images:</strong> ${images.length} image${images.length !== 1 ? 's' : ''}</p>` : '<p class="movie-info-placeholder">&nbsp;</p>'}
+                ${siteButtonHTML}
+                ${previewButtonsHTML}
+                ${watchButtonsHTML}
+                ${actionButtonsHTML}
             </div>
         `;
+
+        movieCard.querySelectorAll('[data-open-url]').forEach(button => {
+            button.addEventListener('click', () => openInNewTab(button.dataset.openUrl));
+        });
+
+        const previewVideo = movieCard.querySelector('.preview-video-element');
+        if (previewVideo) {
+            const hasImages = images.length > 0;
+            movieCard.addEventListener('mouseenter', () => {
+                if (hasImages) {
+                    stopSlideshow(index);
+                    playPreviewVideo(previewVideo);
+                }
+            });
+            movieCard.addEventListener('mouseleave', () => {
+                if (hasImages) {
+                    pausePreviewVideo(previewVideo);
+                    startSlideshow(index);
+                }
+            });
+        }
+
+        movieCard.querySelector('[data-edit-index]')?.addEventListener('click', () => editMovie(index));
+        movieCard.querySelector('[data-delete-index]')?.addEventListener('click', () => deleteMovie(index));
+
+        if (images.length > 1) {
+            setTimeout(() => startSlideshow(index), 100);
+        }
+
         moviesGrid.appendChild(movieCard);
     });
 }
 
 // Start auto-rotating slideshow
 function startSlideshow(movieIndex) {
-    // Clear existing interval if any
     if (slideShowIntervals[movieIndex]) {
-        clearInterval(slideShowIntervals[movieIndex]);
+        return;
     }
 
-    // Auto-rotate every 3 seconds
     slideShowIntervals[movieIndex] = setInterval(() => {
         const movieCard = document.querySelector(`[data-movie-index="${movieIndex}"]`);
-        if (movieCard) {
-            const slides = movieCard.querySelectorAll('.slide');
-            const activeSlide = movieCard.querySelector('.slide.active');
-            const currentIndex = Array.from(slides).indexOf(activeSlide);
-            const nextIndex = (currentIndex + 1) % slides.length;
-            
-            activeSlide.classList.remove('active');
-            activeSlide.style.opacity = '0';
-            
-            slides[nextIndex].classList.add('active');
-            slides[nextIndex].style.opacity = '1';
+        if (!movieCard) {
+            stopSlideshow(movieIndex);
+            return;
         }
+
+        const slides = movieCard.querySelectorAll('.slide');
+        if (slides.length <= 1) {
+            return;
+        }
+
+        const activeSlide = movieCard.querySelector('.slide.active') || slides[0];
+        const currentIndex = Array.from(slides).indexOf(activeSlide);
+        const nextIndex = (currentIndex + 1) % slides.length;
+
+        activeSlide.classList.remove('active');
+        activeSlide.style.opacity = '0';
+
+        slides[nextIndex].classList.add('active');
+        slides[nextIndex].style.opacity = '1';
     }, 3000);
+}
+
+function stopSlideshow(movieIndex) {
+    if (slideShowIntervals[movieIndex]) {
+        clearInterval(slideShowIntervals[movieIndex]);
+        delete slideShowIntervals[movieIndex];
+    }
+}
+
+function playPreviewVideo(videoElement) {
+    if (!videoElement) {
+        return;
+    }
+
+    const playPromise = videoElement.play();
+    if (playPromise && typeof playPromise.catch === 'function') {
+        playPromise.catch(() => {});
+    }
+}
+
+function pausePreviewVideo(videoElement) {
+    if (!videoElement) {
+        return;
+    }
+
+    videoElement.pause();
+    videoElement.currentTime = 0;
 }
 
 // Open URL in new tab
@@ -273,7 +439,6 @@ async function handleAddMovie(e) {
     const previewVideoUrl = document.getElementById('previewVideoUrl').value.trim();
     const movieImages = document.getElementById('movieImages').value.trim();
 
-    // Validation
     if (!videoTitle) {
         alert('Video Title is required!');
         return;
@@ -283,50 +448,48 @@ async function handleAddMovie(e) {
         return;
     }
 
-    if (editingMovieIndex !== null) {
-        // Update existing movie
-        currentStar.movies[editingMovieIndex] = {
-            videoTitle,
-            siteName,
-            videoUrl,
-            previewVideoUrl,
-            images: movieImages
-        };
-        editingMovieIndex = null;
-        document.querySelector('.modal-content h2').textContent = 'Add New Movie';
+    const moviePayload = {
+        videoTitle,
+        siteName,
+        videoUrl,
+        previewVideoUrl,
+        images: movieImages
+    };
+
+    const isEditing = editingMovieIndex !== null;
+
+    if (isEditing) {
+        currentStar.movies[editingMovieIndex] = moviePayload;
     } else {
-        // Add new movie
-        const newMovie = {
-            videoTitle,
-            siteName,
-            videoUrl,
-            previewVideoUrl,
-            images: movieImages
-        };
-        currentStar.movies.push(newMovie);
+        currentStar.movies.push(moviePayload);
     }
 
     try {
-        // Try to send to API (if server is running)
-        const response = await fetch(`${API_URL}/stars/${currentStar.id}/movies`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(currentStar.movies[editingMovieIndex !== null ? editingMovieIndex : currentStar.movies.length - 1])
-        });
+        const response = await fetch(
+            isEditing
+                ? `${API_URL}/stars/${currentStar.id}/movies/${editingMovieIndex}`
+                : `${API_URL}/stars/${currentStar.id}/movies`,
+            {
+                method: isEditing ? 'PUT' : 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(moviePayload)
+            }
+        );
 
-        if (response.ok) {
-            saveData();
+        if (!response.ok) {
+            throw new Error('Server error');
         }
     } catch (error) {
-        console.log('Server not running, saving to localStorage only...');
-        saveData();
+        console.log('Server not running or update failed, saving to localStorage only...');
     }
 
+    saveData();
     closeModal();
-    movieCount.textContent = `${currentStar.movies.length} movie${currentStar.movies.length !== 1 ? 's' : ''}`;
-    renderMovies();
+    updateMovieCount();
+    populateMovieFilters();
+    applyMovieFilters();
 }
 
 // Edit movie
@@ -348,7 +511,6 @@ function editMovie(index) {
 async function deleteMovie(index) {
     if (confirm('Are you sure you want to delete this movie?')) {
         try {
-            // Try to send delete request to API (if server is running)
             const response = await fetch(`${API_URL}/stars/${currentStar.id}/movies/${index}`, {
                 method: 'DELETE'
             });
@@ -360,14 +522,14 @@ async function deleteMovie(index) {
                 throw new Error('Server error');
             }
         } catch (error) {
-            // Fallback to localStorage if server not running
             console.log('Server not running, deleting from localStorage only...');
             currentStar.movies.splice(index, 1);
             saveData();
         }
 
-        movieCount.textContent = `${currentStar.movies.length} movie${currentStar.movies.length !== 1 ? 's' : ''}`;
-        renderMovies();
+        updateMovieCount();
+        populateMovieFilters();
+        applyMovieFilters();
     }
 }
 
@@ -383,16 +545,20 @@ async function deleteStar() {
     }
 
     try {
-        // Remove from array
-        starsData = starsData.filter(star => star.id !== currentStar.id);
-        saveData();
-        
-        // Go back to home
-        window.location.href = 'index.html';
+        const response = await fetch(`${API_URL}/stars/${currentStar.id}`, {
+            method: 'DELETE'
+        });
+
+        if (!response.ok) {
+            throw new Error('Server error');
+        }
     } catch (error) {
-        console.error('Error deleting star:', error);
-        alert('Failed to delete star');
+        console.log('Server not running or delete failed, updating localStorage only...');
     }
+
+    starsData = starsData.filter(star => star.id !== currentStar.id);
+    saveData();
+    window.location.href = 'index.html';
 }
 
 // Go back to home
