@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Star Library</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <h1>Star Library</h1>
+            <button class="btn btn-add" id="addStarBtn">+ Add Star</button>
+        </header>
+
+        <!-- Filters Section -->
+        <div class="filters-section">
+            <div class="filter-group">
+                <label for="nameFilter">Filter by Name:</label>
+                <select id="nameFilter">
+                    <option value="">All Stars</option>
+                </select>
+            </div>
+
+            <div class="filter-group checkboxes-group">
+                <label>Filter by Selection:</label>
+                <div id="checkboxContainer" class="checkbox-container"></div>
+            </div>
+
+            <button class="btn btn-reset" id="resetFiltersBtn">Reset Filters</button>
+        </div>
+
+        <!-- Stars Grid -->
+        <div class="stars-grid" id="starsGrid">
+            <!-- Stars will be loaded here -->
+        </div>
+    </div>
+
+    <!-- Add Star Modal -->
+    <div class="modal" id="addStarModal">
+        <div class="modal-content">
+            <span class="close" id="closeAddModal">&times;</span>
+            <h2>Add New Star</h2>
+            <form id="addStarForm">
+                <div class="form-group">
+                    <label for="starName">Star Name:</label>
+                    <input type="text" id="starName" required>
+                </div>
+                <div class="form-group">
+                    <label for="starPictureUrl">Picture URL:</label>
+                    <input type="url" id="starPictureUrl" required>
+                </div>
+                <button type="submit" class="btn btn-submit">Add Star</button>
+            </form>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
