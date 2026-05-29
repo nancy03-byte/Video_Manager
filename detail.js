@@ -12,7 +12,9 @@ const addMovieForm = document.getElementById('addMovieForm');
 const editStarModal = document.getElementById('editStarModal');
 const closeEditStarModal = document.getElementById('closeEditStarModal');
 const editStarForm = document.getElementById('editStarForm');
+const movieSearchInput = document.getElementById('movieSearchInput');
 const movieSiteFilter = document.getElementById('movieSiteFilter');
+const movieSortSelect = document.getElementById('movieSortSelect');
 const resetMovieFiltersBtn = document.getElementById('resetMovieFiltersBtn');
 const starImage = document.getElementById('starImage');
 const starNameElement = document.getElementById('starName');
@@ -49,6 +51,8 @@ function setupEventListeners() {
     closeEditStarModal.addEventListener('click', () => closeEditStarModalDialog());
     addMovieForm.addEventListener('submit', handleAddMovie);
     editStarForm.addEventListener('submit', handleEditStar);
+    movieSearchInput.addEventListener('input', applyMovieFilters);
+    movieSortSelect.addEventListener('change', applyMovieFilters);
     resetMovieFiltersBtn.addEventListener('click', resetMovieFilters);
     window.addEventListener('click', (e) => {
         if (e.target === addMovieModal) closeMovieModalDialog();
@@ -361,6 +365,18 @@ function getMovieSiteFilterValues(movies) {
         .filter(Boolean);
 }
 
+function getMovieSearchText(movie) {
+    return [
+        movie.videoTitle || '',
+        movie.siteName || '',
+        extractDomainName(movie.siteName || movie.siteNameLink || movie.siteUrl || '')
+    ].join(' ').toLowerCase();
+}
+
+function getMovieOriginalIndex(movie) {
+    return currentStar.movies.indexOf(movie);
+}
+
 // Utility: Extract domain name from URL or plain domain
 function extractDomainName(value) {
     if (!value) {
@@ -426,21 +442,60 @@ function populateMovieFilters() {
     setDropdownOptions(movieSiteFilterDropdown, siteOptions);
 }
 
+function sortMovies(movies) {
+    const sortValue = movieSortSelect?.value || 'insertion-asc';
+    const sortedMovies = [...movies];
+    const compareText = (left, right) => left.localeCompare(right, undefined, { sensitivity: 'base' });
+
+    sortedMovies.sort((leftMovie, rightMovie) => {
+        const leftIndex = getMovieOriginalIndex(leftMovie);
+        const rightIndex = getMovieOriginalIndex(rightMovie);
+
+        if (sortValue === 'insertion-desc') {
+            return rightIndex - leftIndex;
+        }
+
+        if (sortValue === 'title-asc' || sortValue === 'title-desc') {
+            const leftTitle = leftMovie.videoTitle || '';
+            const rightTitle = rightMovie.videoTitle || '';
+            const result = compareText(leftTitle, rightTitle) || (leftIndex - rightIndex);
+            return sortValue === 'title-desc' ? -result : result;
+        }
+
+        if (sortValue === 'site-asc' || sortValue === 'site-desc') {
+            const leftSite = extractDomainName(leftMovie.siteName || leftMovie.siteNameLink || leftMovie.siteUrl || '');
+            const rightSite = extractDomainName(rightMovie.siteName || rightMovie.siteNameLink || rightMovie.siteUrl || '');
+            const result = compareText(leftSite, rightSite) || compareText(leftMovie.videoTitle || '', rightMovie.videoTitle || '') || (leftIndex - rightIndex);
+            return sortValue === 'site-desc' ? -result : result;
+        }
+
+        return leftIndex - rightIndex;
+    });
+
+    return sortedMovies;
+}
+
 function applyMovieFilters() {
     const selectedSites = new Set(movieSiteFilterDropdown?.selected || []);
+    const searchTerm = movieSearchInput.value.trim().toLowerCase();
 
     filteredMovies = currentStar.movies.filter(movie => {
+        const matchesSearch = !searchTerm || getMovieSearchText(movie).includes(searchTerm);
         const matchesSites =
             selectedSites.size === 0 ||
             getMovieSiteFilterValues([movie]).some(site => selectedSites.has(site));
 
-        return matchesSites;
+        return matchesSearch && matchesSites;
     });
+
+    filteredMovies = sortMovies(filteredMovies);
 
     renderMovies();
 }
 
 function resetMovieFilters() {
+    movieSearchInput.value = '';
+    movieSortSelect.value = 'insertion-asc';
     if (movieSiteFilterDropdown) {
         movieSiteFilterDropdown.selected.clear();
         renderDropdown(movieSiteFilterDropdown);
@@ -518,7 +573,7 @@ function renderMovies() {
     const movies = Array.isArray(filteredMovies) ? filteredMovies : [];
 
     if (movies.length === 0) {
-        moviesGrid.innerHTML = '<div class="empty-state" style="grid-column: 1/-1;"><p>No movies match the selected site filter.</p></div>';
+        moviesGrid.innerHTML = '<div class="empty-state" style="grid-column: 1/-1;"><p>No movies match the current filters.</p></div>';
         return;
     }
 

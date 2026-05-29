@@ -30,9 +30,26 @@
 
         <!-- Movie Filters -->
         <div class="filters-section">
+            <div class="filter-group search-group">
+                <label for="movieSearchInput">Search Movies:</label>
+                <input type="text" id="movieSearchInput" placeholder="Search by movie title or site">
+            </div>
+
             <div class="filter-group">
                 <label for="movieSiteFilter">Filter by Site:</label>
                 <select id="movieSiteFilter" multiple size="4"></select>
+            </div>
+
+            <div class="filter-group">
+                <label for="movieSortSelect">Sort Movies:</label>
+                <select id="movieSortSelect">
+                    <option value="insertion-asc">Insertion order: Oldest first</option>
+                    <option value="insertion-desc">Insertion order: Newest first</option>
+                    <option value="title-asc">Alphabetic: A to Z</option>
+                    <option value="title-desc">Alphabetic: Z to A</option>
+                    <option value="site-asc">Site name: A to Z</option>
+                    <option value="site-desc">Site name: Z to A</option>
+                </select>
             </div>
 
             <button class="btn btn-reset" id="resetMovieFiltersBtn">Reset Movie Filters</button>
