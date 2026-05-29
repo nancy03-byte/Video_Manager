@@ -21,6 +21,7 @@ const starNameElement = document.getElementById('starName');
 const starTitle = document.getElementById('starTitle');
 const movieCount = document.getElementById('movieCount');
 const toggleSlideshowsBtn = document.getElementById('toggleSlideshowsBtn');
+const movieColumnsSelect = document.getElementById('movieColumnsSelect');
 const moviesGrid = document.getElementById('moviesGrid');
 
 // Global data
@@ -38,6 +39,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const starId = parseInt(params.get('starId'));
 
     setupMovieFilterDropdown();
+    setupMovieColumns();
     await loadData();
     loadStarDetails(starId);
     setupEventListeners();
@@ -61,6 +63,7 @@ function setupEventListeners() {
     movieSortSelect.addEventListener('change', applyMovieFilters);
     resetMovieFiltersBtn.addEventListener('click', resetMovieFilters);
     toggleSlideshowsBtn.addEventListener('click', toggleAllSlideshows);
+    movieColumnsSelect.addEventListener('change', updateMovieColumns);
     window.addEventListener('click', (e) => {
         if (e.target === addMovieModal) closeMovieModalDialog();
         if (e.target === editStarModal) closeEditStarModalDialog();
@@ -285,6 +288,20 @@ function updateDropdownSummary(state) {
             : visibleLabels;
     }
     state.root.classList.toggle("has-selection", selectedCount > 0);
+}
+
+function setupMovieColumns() {
+    const savedColumns = localStorage.getItem('movieColumnsPerRow') || movieColumnsSelect.value;
+    movieColumnsSelect.value = savedColumns;
+    updateMovieColumns();
+}
+
+function updateMovieColumns() {
+    const columns = Number(movieColumnsSelect.value) || 5;
+    const boundedColumns = Math.min(Math.max(columns, 2), 6);
+    movieColumnsSelect.value = String(boundedColumns);
+    moviesGrid.style.setProperty('--movies-per-row', boundedColumns);
+    localStorage.setItem('movieColumnsPerRow', String(boundedColumns));
 }
 
 async function loadData() {

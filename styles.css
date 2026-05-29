@@ -457,9 +457,31 @@ body {
 
 .movies-section-actions {
     display: flex;
+    align-items: center;
     gap: 10px;
     justify-content: flex-end;
     flex-wrap: wrap;
+}
+
+.movies-per-row-control {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 40px;
+    color: #374151;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.movies-per-row-control select {
+    min-width: 64px;
+    min-height: 40px;
+    padding: 8px 10px;
+    border: 1px solid #d7dce4;
+    border-radius: 5px;
+    background: #fff;
+    color: #1f2937;
+    font: inherit;
 }
 
 .movies-section h3 {
@@ -488,7 +510,7 @@ body {
 
 .movies-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    grid-template-columns: repeat(var(--movies-per-row, 5), minmax(0, 1fr));
     gap: 20px;
     align-content: start;
 }
@@ -1086,6 +1108,15 @@ body {
 
     .movies-section-actions {
         width: 100%;
+    }
+
+    .movies-per-row-control {
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    .movies-per-row-control select {
+        flex: 0 0 96px;
     }
 
     .movies-section-actions .btn {

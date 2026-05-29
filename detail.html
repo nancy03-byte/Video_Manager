@@ -59,6 +59,16 @@
             <div class="movies-section-header">
                 <h3>Movies</h3>
                 <div class="movies-section-actions">
+                    <label class="movies-per-row-control" for="movieColumnsSelect">
+                        <span>Per row</span>
+                        <select id="movieColumnsSelect">
+                            <option value="2">2</option>
+                            <option value="3">3</option>
+                            <option value="4">4</option>
+                            <option value="5" selected>5</option>
+                            <option value="6">6</option>
+                        </select>
+                    </label>
                     <button class="btn btn-add" id="addMovieBtn">+ Add Movie</button>
                     <button class="btn btn-slideshow-toggle" id="toggleSlideshowsBtn" type="button">Stop Slides</button>
                 </div>
