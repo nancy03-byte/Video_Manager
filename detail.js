@@ -745,7 +745,22 @@ function extractYouTubeId(url) {
 
 // Open add movie modal
 function openAddMovieModal() {
+    if (editingMovieIndex === null) {
+        document.getElementById('siteName').value = getLastMovieSiteName();
+    }
     addMovieModal.classList.add('show');
+}
+
+function getLastMovieSiteName() {
+    const movies = Array.isArray(currentStar?.movies) ? currentStar.movies : [];
+    for (let index = movies.length - 1; index >= 0; index--) {
+        const siteName = movies[index]?.siteName?.trim();
+        if (siteName) {
+            return siteName;
+        }
+    }
+
+    return '';
 }
 
 // Open edit star modal
