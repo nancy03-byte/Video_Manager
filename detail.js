@@ -51,6 +51,10 @@ function setupEventListeners() {
     closeEditStarModal.addEventListener('click', () => closeEditStarModalDialog());
     addMovieForm.addEventListener('submit', handleAddMovie);
     editStarForm.addEventListener('submit', handleEditStar);
+    document.getElementById('movieImages').addEventListener('blur', (event) => addTrailingComma(event.target));
+    document.getElementById('videoUrl').addEventListener('blur', (event) => addTrailingComma(event.target));
+    document.getElementById('movieImages').addEventListener('keydown', handleCommaFieldEnter);
+    document.getElementById('videoUrl').addEventListener('keydown', handleCommaFieldEnter);
     movieSearchInput.addEventListener('input', applyMovieFilters);
     movieSortSelect.addEventListener('change', applyMovieFilters);
     resetMovieFiltersBtn.addEventListener('click', resetMovieFilters);
@@ -347,6 +351,22 @@ function splitCommaSeparated(value) {
 
 function getSingleUrl(value) {
     return value ? String(value).trim() : '';
+}
+
+function addTrailingComma(inputElement) {
+    const value = inputElement.value.trim();
+    inputElement.value = value && !value.endsWith(',') ? `${value},` : value;
+}
+
+function handleCommaFieldEnter(event) {
+    if (event.key !== 'Enter') {
+        return;
+    }
+
+    event.preventDefault();
+    addTrailingComma(event.target);
+    event.target.selectionStart = event.target.value.length;
+    event.target.selectionEnd = event.target.value.length;
 }
 
 function getMovieSiteValues(movies) {
@@ -754,9 +774,14 @@ async function handleAddMovie(e) {
 
     const videoTitle = document.getElementById('movieTitle').value.trim();
     const siteName = document.getElementById('siteName').value.trim();
-    const videoUrl = document.getElementById('videoUrl').value.trim();
+    const videoUrlInput = document.getElementById('videoUrl');
+    const movieImagesInput = document.getElementById('movieImages');
+    addTrailingComma(videoUrlInput);
+    addTrailingComma(movieImagesInput);
+
+    const videoUrl = videoUrlInput.value.trim();
     const previewVideoUrl = document.getElementById('previewVideoUrl').value.trim();
-    const movieImages = document.getElementById('movieImages').value.trim();
+    const movieImages = movieImagesInput.value.trim();
 
     if (!videoTitle) {
         alert('Video Title is required!');
