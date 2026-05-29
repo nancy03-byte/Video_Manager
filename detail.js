@@ -369,6 +369,74 @@ function splitCommaSeparated(value) {
     return value ? value.split(',').map(item => item.trim()).filter(Boolean) : [];
 }
 
+function normalizeNameList(values) {
+    const seen = new Set();
+
+    return values
+        .map((value) => String(value || '').trim())
+        .filter(Boolean)
+        .filter((value) => {
+            const key = value.toLowerCase();
+            if (seen.has(key)) {
+                return false;
+            }
+
+            seen.add(key);
+            return true;
+        });
+}
+
+function getMovieStarNames(movieStarsValue) {
+    return normalizeNameList([
+        currentStar?.name || '',
+        ...splitCommaSeparated(movieStarsValue)
+    ]);
+}
+
+function createLocalStarIfNeeded(name) {
+    const normalizedName = String(name || '').trim();
+    if (!normalizedName) {
+        return null;
+    }
+
+    let star = starsData.find((candidate) => candidate.name.toLowerCase() === normalizedName.toLowerCase());
+    if (star) {
+        return star;
+    }
+
+    star = {
+        id: Date.now() + Math.floor(Math.random() * 1000000),
+        name: normalizedName,
+        pictureUrl: 'https://via.placeholder.com/300x400?text=Image+Not+Found',
+        movies: []
+    };
+
+    starsData.push(star);
+    return star;
+}
+
+function applyMovieToLocalProfiles(moviePayload, starNames) {
+    const uniqueNames = normalizeNameList(starNames);
+    const movieCopy = {
+        ...moviePayload,
+        starNames: [...uniqueNames]
+    };
+
+    uniqueNames.forEach((name) => {
+        const star = createLocalStarIfNeeded(name);
+        if (!star) {
+            return;
+        }
+
+        const existingMovieIndex = star.movies.findIndex((movie) => String(movie.id) === String(moviePayload.id));
+        if (existingMovieIndex >= 0) {
+            star.movies[existingMovieIndex] = movieCopy;
+        } else {
+            star.movies.push(movieCopy);
+        }
+    });
+}
+
 function getSingleUrl(value) {
     return value ? String(value).trim() : '';
 }
@@ -808,6 +876,9 @@ function extractYouTubeId(url) {
 function openAddMovieModal() {
     if (editingMovieIndex === null) {
         document.getElementById('siteName').value = getLastMovieSiteName();
+        if (currentStar) {
+            document.getElementById('movieStars').value = currentStar.name;
+        }
     }
     addMovieModal.classList.add('show');
 }
@@ -836,6 +907,8 @@ function closeMovieModalDialog() {
     addMovieModal.classList.remove('show');
     addMovieForm.reset();
     editingMovieIndex = null;
+    // Clear the stars field explicitly
+    document.getElementById('movieStars').value = '';
     addMovieModal.querySelector('.modal-content h2').textContent = 'Add New Movie';
 }
 
@@ -852,37 +925,36 @@ async function handleAddMovie(e) {
     const siteName = document.getElementById('siteName').value.trim();
     const videoUrlInput = document.getElementById('videoUrl');
     const movieImagesInput = document.getElementById('movieImages');
+    const movieStarsInput = document.getElementById('movieStars');
+    const previewVideoUrl = document.getElementById('previewVideoUrl').value.trim();
+    const isEditing = editingMovieIndex !== null;
+
     addTrailingComma(videoUrlInput);
     addTrailingComma(movieImagesInput);
 
     const videoUrl = videoUrlInput.value.trim();
-    const previewVideoUrl = document.getElementById('previewVideoUrl').value.trim();
     const movieImages = movieImagesInput.value.trim();
+    const starNames = getMovieStarNames(movieStarsInput.value);
 
     if (!videoTitle) {
         alert('Video Title is required!');
         return;
     }
+
     if (!siteName) {
         alert('Site Name is required!');
         return;
     }
 
     const moviePayload = {
+        id: currentStar?.movies?.[editingMovieIndex]?.id || Date.now() + Math.floor(Math.random() * 1000000),
         videoTitle,
         siteName,
         videoUrl,
         previewVideoUrl,
-        images: movieImages
+        images: movieImages,
+        starNames
     };
-
-    const isEditing = editingMovieIndex !== null;
-
-    if (isEditing) {
-        currentStar.movies[editingMovieIndex] = moviePayload;
-    } else {
-        currentStar.movies.push(moviePayload);
-    }
 
     try {
         const response = await fetch(
@@ -901,12 +973,36 @@ async function handleAddMovie(e) {
         if (!response.ok) {
             throw new Error('Server error');
         }
+
+        await loadData();
     } catch (error) {
         console.log('Server not running or update failed, saving to localStorage only...');
+        if (isEditing) {
+            const previousMovie = currentStar.movies[editingMovieIndex];
+            currentStar.movies[editingMovieIndex] = moviePayload;
+
+            if (previousMovie && previousMovie.id) {
+                starsData.forEach((star) => {
+                    const linkedMovieIndex = star.movies.findIndex((movie) => String(movie.id) === String(previousMovie.id));
+                    if (linkedMovieIndex >= 0) {
+                        star.movies[linkedMovieIndex] = {
+                            ...moviePayload,
+                            starNames: [...starNames]
+                        };
+                    }
+                });
+            } else {
+                applyMovieToLocalProfiles(moviePayload, starNames);
+            }
+        } else {
+            applyMovieToLocalProfiles(moviePayload, starNames);
+        }
+        saveData();
     }
 
-    saveData();
     closeMovieModalDialog();
+    await loadData();
+    loadStarDetails(currentStar.id);
     updateMovieCount();
     populateMovieFilters();
     applyMovieFilters();
@@ -959,13 +1055,14 @@ async function handleEditStar(e) {
 function editMovie(index) {
     editingMovieIndex = index;
     const movie = currentStar.movies[index];
-
     document.getElementById('movieTitle').value = movie.videoTitle;
     document.getElementById('siteName').value = movie.siteName;
     document.getElementById('videoUrl').value = movie.videoUrl || '';
     document.getElementById('previewVideoUrl').value = movie.previewVideoUrl || '';
     document.getElementById('movieImages').value = movie.images || '';
-
+    document.getElementById('movieStars').value = Array.isArray(movie.starNames) && movie.starNames.length > 0
+        ? movie.starNames.join(', ')
+        : currentStar.name;
     addMovieModal.querySelector('.modal-content h2').textContent = 'Edit Movie';
     openAddMovieModal();
 }
