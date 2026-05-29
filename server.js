@@ -14,11 +14,83 @@ app.use(express.static(__dirname));
 
 function readDataFile() {
     const data = fs.readFileSync(DATA_FILE, 'utf8');
-    return JSON.parse(data);
+    return normalizeStoredData(JSON.parse(data));
 }
 
 function writeDataFile(jsonData) {
-    fs.writeFileSync(DATA_FILE, JSON.stringify(jsonData, null, 2));
+    const normalizedData = normalizeStoredData(jsonData);
+    fs.writeFileSync(DATA_FILE, JSON.stringify(normalizedData, null, 2));
+}
+
+function normalizeStoredData(jsonData) {
+    const sourceStars = Array.isArray(jsonData?.stars) ? jsonData.stars : [];
+    const normalizedStars = sourceStars.map((star) => ({
+        ...star,
+        name: normalizeStarName(star.name),
+        pictureUrl: normalizeStarName(star.pictureUrl),
+        movies: []
+    }));
+
+    const starLookup = new Map(
+        normalizedStars.map((star) => [normalizeStarKey(star.name), star])
+    );
+
+    const seenMovies = new Map();
+
+    sourceStars.forEach((star) => {
+        const ownerStar = starLookup.get(normalizeStarKey(star.name));
+        if (!ownerStar) {
+            return;
+        }
+
+        const sourceMovies = Array.isArray(star.movies) ? star.movies : [];
+        sourceMovies.forEach((movie) => {
+            const declaredStarNames = uniqueByNormalizedName([
+                star.name,
+                ...splitCommaSeparated(movie.starNames)
+            ]);
+
+            const targetStarNames = declaredStarNames.length > 1
+                ? declaredStarNames
+                : [star.name];
+
+            const sourceSignature = String(movie.id || `${movie.videoTitle || ''}|${movie.siteName || ''}|${movie.videoUrl || ''}|${movie.previewVideoUrl || ''}|${movie.images || ''}`);
+
+            targetStarNames.forEach((targetStarName, index) => {
+                const targetKey = normalizeStarKey(targetStarName);
+                const targetStar = starLookup.get(targetKey);
+                if (!targetStar) {
+                    return;
+                }
+
+                const dedupeKey = `${sourceSignature}::${targetKey}`;
+                if (seenMovies.has(dedupeKey)) {
+                    return;
+                }
+
+                seenMovies.set(dedupeKey, true);
+
+                const movieCopy = {
+                    ...movie,
+                    id: index === 0 && targetKey === normalizeStarKey(star.name) && movie.id
+                        ? movie.id
+                        : createMovieId(),
+                    starNames: [targetStar.name]
+                };
+
+                targetStar.movies.push(movieCopy);
+            });
+        });
+    });
+
+    return {
+        ...jsonData,
+        stars: normalizedStars
+    };
+}
+
+function createMovieId() {
+    return Date.now() + Math.floor(Math.random() * 1000000);
 }
 
 function normalizeStarName(name) {
@@ -102,26 +174,27 @@ function buildMoviePayload(body, movieId, starNames) {
     };
 }
 
-function syncMovieAcrossStars(jsonData, moviePayload, starNames) {
+function createMovieCopy(moviePayload, movieId, starName) {
+    return {
+        ...moviePayload,
+        id: movieId,
+        starNames: [starName]
+    };
+}
+
+function saveMovieToStars(jsonData, moviePayload, starNames) {
     const targets = uniqueByNormalizedName(starNames)
         .map((name) => ensureStarByName(jsonData, name))
         .filter(Boolean);
 
-    targets.forEach((star) => {
-        const existingMovieIndex = star.movies.findIndex((movie) => String(movie.id) === String(moviePayload.id));
-        const movieCopy = {
-            ...moviePayload,
-            starNames: [...moviePayload.starNames]
-        };
-
-        if (existingMovieIndex >= 0) {
-            star.movies[existingMovieIndex] = movieCopy;
-        } else {
-            star.movies.push(movieCopy);
-        }
+    const movieCopies = targets.map((star, index) => {
+        const movieId = index === 0 ? moviePayload.id : Date.now() + Math.floor(Math.random() * 1000000) + index;
+        const movieCopy = createMovieCopy(moviePayload, movieId, star.name);
+        star.movies.push(movieCopy);
+        return movieCopy;
     });
 
-    return targets;
+    return movieCopies;
 }
 
 app.get('/api/stars', (req, res) => {
@@ -207,20 +280,24 @@ app.post('/api/stars/:starId/movies', (req, res) => {
             return res.status(400).json({ error: 'Video title and site name are required' });
         }
 
-        const movieId = req.body.id || Date.now() + Math.floor(Math.random() * 1000000);
         const starNames = uniqueByNormalizedName([
             currentStar.name,
             ...splitCommaSeparated(req.body.starNames || req.body.movieStars || req.body.stars)
         ]);
 
-        const moviePayload = buildMoviePayload(req.body, movieId, starNames);
-        const updatedStars = syncMovieAcrossStars(jsonData, moviePayload, starNames);
+        const moviePayload = buildMoviePayload(
+            req.body,
+            req.body.id || Date.now() + Math.floor(Math.random() * 1000000),
+            [currentStar.name]
+        );
+        const movieCopies = saveMovieToStars(jsonData, moviePayload, starNames);
+        const primaryMovie = movieCopies[0] || moviePayload;
 
         writeDataFile(jsonData);
 
         res.status(201).json({
-            movie: moviePayload,
-            starsUpdated: updatedStars.map((star) => ({ id: star.id, name: star.name }))
+            movie: primaryMovie,
+            starsUpdated: starNames
         });
     } catch (error) {
         console.error('Error adding movie:', error);
@@ -251,19 +328,7 @@ app.put('/api/stars/:starId/movies/:movieIndex', (req, res) => {
         }
 
         const movieId = existingMovie.id || req.body.id || Date.now() + Math.floor(Math.random() * 1000000);
-        const updatedMovie = buildMoviePayload(req.body, movieId, existingMovie.starNames || [star.name]);
-        const starNames = uniqueByNormalizedName(updatedMovie.starNames.length > 0 ? updatedMovie.starNames : [star.name]);
-        updatedMovie.starNames = starNames;
-
-        jsonData.stars.forEach((candidateStar) => {
-            const targetIndex = candidateStar.movies.findIndex((movie) => String(movie.id) === String(movieId));
-            if (targetIndex >= 0) {
-                candidateStar.movies[targetIndex] = {
-                    ...updatedMovie,
-                    starNames: [...starNames]
-                };
-            }
-        });
+        const updatedMovie = buildMoviePayload(req.body, movieId, [star.name]);
 
         star.movies[movieIndex] = updatedMovie;
         writeDataFile(jsonData);
@@ -317,18 +382,7 @@ app.delete('/api/stars/:starId/movies/:movieIndex', (req, res) => {
             return res.status(404).json({ error: 'Movie not found' });
         }
 
-        const removedMovie = star.movies[movieIndex];
         star.movies.splice(movieIndex, 1);
-
-        if (removedMovie && removedMovie.id) {
-            jsonData.stars.forEach((candidateStar) => {
-                if (String(candidateStar.id) === String(star.id)) {
-                    return;
-                }
-
-                candidateStar.movies = candidateStar.movies.filter((movie) => String(movie.id) !== String(removedMovie.id));
-            });
-        }
 
         writeDataFile(jsonData);
 

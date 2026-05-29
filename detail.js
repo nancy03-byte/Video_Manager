@@ -417,16 +417,17 @@ function createLocalStarIfNeeded(name) {
 
 function applyMovieToLocalProfiles(moviePayload, starNames) {
     const uniqueNames = normalizeNameList(starNames);
-    const movieCopy = {
-        ...moviePayload,
-        starNames: [...uniqueNames]
-    };
 
     uniqueNames.forEach((name) => {
         const star = createLocalStarIfNeeded(name);
         if (!star) {
             return;
         }
+
+        const movieCopy = {
+            ...moviePayload,
+            starNames: [name]
+        };
 
         const existingMovieIndex = star.movies.findIndex((movie) => String(movie.id) === String(moviePayload.id));
         if (existingMovieIndex >= 0) {
@@ -953,7 +954,7 @@ async function handleAddMovie(e) {
         videoUrl,
         previewVideoUrl,
         images: movieImages,
-        starNames
+        starNames: isEditing ? [currentStar.name] : starNames
     };
 
     try {
@@ -978,22 +979,10 @@ async function handleAddMovie(e) {
     } catch (error) {
         console.log('Server not running or update failed, saving to localStorage only...');
         if (isEditing) {
-            const previousMovie = currentStar.movies[editingMovieIndex];
-            currentStar.movies[editingMovieIndex] = moviePayload;
-
-            if (previousMovie && previousMovie.id) {
-                starsData.forEach((star) => {
-                    const linkedMovieIndex = star.movies.findIndex((movie) => String(movie.id) === String(previousMovie.id));
-                    if (linkedMovieIndex >= 0) {
-                        star.movies[linkedMovieIndex] = {
-                            ...moviePayload,
-                            starNames: [...starNames]
-                        };
-                    }
-                });
-            } else {
-                applyMovieToLocalProfiles(moviePayload, starNames);
-            }
+            currentStar.movies[editingMovieIndex] = {
+                ...moviePayload,
+                starNames: [currentStar.name]
+            };
         } else {
             applyMovieToLocalProfiles(moviePayload, starNames);
         }
@@ -1060,9 +1049,7 @@ function editMovie(index) {
     document.getElementById('videoUrl').value = movie.videoUrl || '';
     document.getElementById('previewVideoUrl').value = movie.previewVideoUrl || '';
     document.getElementById('movieImages').value = movie.images || '';
-    document.getElementById('movieStars').value = Array.isArray(movie.starNames) && movie.starNames.length > 0
-        ? movie.starNames.join(', ')
-        : currentStar.name;
+    document.getElementById('movieStars').value = currentStar.name;
     addMovieModal.querySelector('.modal-content h2').textContent = 'Edit Movie';
     openAddMovieModal();
 }
