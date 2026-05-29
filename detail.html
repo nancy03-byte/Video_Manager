@@ -14,6 +14,7 @@
             <h1 id="starTitle">Star Details</h1>
             <div class="header-buttons">
                 <button class="btn btn-add" id="addMovieBtn">+ Add Movie</button>
+                <button class="btn btn-edit" id="editStarBtn">Edit Star</button>
                 <button class="btn btn-delete-star" id="deleteStarBtn">Delete Star</button>
             </div>
         </header>
@@ -73,6 +74,25 @@
                     <textarea id="videoUrl" placeholder="https://video1.html, https://video2.html" rows="2"></textarea>
                 </div>
                 <button type="submit" class="btn btn-submit">Add Movie</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Edit Star Modal -->
+    <div class="modal" id="editStarModal">
+        <div class="modal-content">
+            <span class="close" id="closeEditStarModal">&times;</span>
+            <h2>Edit Star Profile</h2>
+            <form id="editStarForm">
+                <div class="form-group">
+                    <label for="editStarName">Star Name:</label>
+                    <input type="text" id="editStarName" required>
+                </div>
+                <div class="form-group">
+                    <label for="editStarPictureUrl">Picture URL:</label>
+                    <input type="url" id="editStarPictureUrl" required>
+                </div>
+                <button type="submit" class="btn btn-submit">Save Changes</button>
             </form>
         </div>
     </div>

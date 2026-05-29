@@ -4,10 +4,14 @@ const API_URL = 'http://localhost:3000/api';
 // DOM Elements
 const backBtn = document.getElementById('backBtn');
 const addMovieBtn = document.getElementById('addMovieBtn');
+const editStarBtn = document.getElementById('editStarBtn');
 const deleteStarBtn = document.getElementById('deleteStarBtn');
 const addMovieModal = document.getElementById('addMovieModal');
 const closeMovieModal = document.getElementById('closeMovieModal');
 const addMovieForm = document.getElementById('addMovieForm');
+const editStarModal = document.getElementById('editStarModal');
+const closeEditStarModal = document.getElementById('closeEditStarModal');
+const editStarForm = document.getElementById('editStarForm');
 const movieSiteFilter = document.getElementById('movieSiteFilter');
 const resetMovieFiltersBtn = document.getElementById('resetMovieFiltersBtn');
 const starImage = document.getElementById('starImage');
@@ -22,12 +26,14 @@ let starsData = [];
 let filteredMovies = [];
 let slideShowIntervals = {};
 let editingMovieIndex = null;
+let movieSiteFilterDropdown = null;
 
 // Initialize
 document.addEventListener('DOMContentLoaded', async () => {
     const params = new URLSearchParams(window.location.search);
     const starId = parseInt(params.get('starId'));
 
+    setupMovieFilterDropdown();
     await loadData();
     loadStarDetails(starId);
     setupEventListeners();
@@ -37,14 +43,208 @@ document.addEventListener('DOMContentLoaded', async () => {
 function setupEventListeners() {
     backBtn.addEventListener('click', goBack);
     addMovieBtn.addEventListener('click', openAddMovieModal);
+    editStarBtn.addEventListener('click', openEditStarModal);
     deleteStarBtn.addEventListener('click', deleteStar);
-    closeMovieModal.addEventListener('click', closeModal);
+    closeMovieModal.addEventListener('click', () => closeMovieModalDialog());
+    closeEditStarModal.addEventListener('click', () => closeEditStarModalDialog());
     addMovieForm.addEventListener('submit', handleAddMovie);
-    movieSiteFilter.addEventListener('change', applyMovieFilters);
+    editStarForm.addEventListener('submit', handleEditStar);
     resetMovieFiltersBtn.addEventListener('click', resetMovieFilters);
     window.addEventListener('click', (e) => {
-        if (e.target === addMovieModal) closeModal();
+        if (e.target === addMovieModal) closeMovieModalDialog();
+        if (e.target === editStarModal) closeEditStarModalDialog();
     });
+}
+
+function setupMovieFilterDropdown() {
+    movieSiteFilterDropdown = createCheckboxDropdown(movieSiteFilter, {
+        title: "Filter by Site",
+        emptyLabel: "All Sites"
+    });
+    document.addEventListener("click", handleDocumentClick);
+}
+
+function handleDocumentClick(event) {
+    if (!event.target.closest(".checkbox-dropdown")) {
+        closeAllDropdowns();
+    }
+}
+
+function createCheckboxDropdown(selectElement, { title, emptyLabel }) {
+    if (!selectElement || !selectElement.parentElement) {
+        return null;
+    }
+
+    const group = selectElement.parentElement;
+    const label = group.querySelector(`label[for="${selectElement.id}"]`);
+
+    const root = document.createElement("div");
+    root.className = "checkbox-dropdown";
+
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "checkbox-dropdown-trigger";
+    button.id = `${selectElement.id}-trigger`;
+
+    const titleSpan = document.createElement("span");
+    titleSpan.className = "checkbox-dropdown-title";
+    titleSpan.textContent = title;
+
+    const summarySpan = document.createElement("span");
+    summarySpan.className = "checkbox-dropdown-summary";
+    summarySpan.textContent = emptyLabel;
+
+    const caretSpan = document.createElement("span");
+    caretSpan.className = "checkbox-dropdown-caret";
+    caretSpan.textContent = "▾";
+
+    button.append(titleSpan, summarySpan, caretSpan);
+
+    const panel = document.createElement("div");
+    panel.className = "checkbox-dropdown-menu";
+    panel.hidden = true;
+
+    root.append(button, panel);
+    group.insertBefore(root, selectElement);
+    selectElement.remove();
+
+    if (label) {
+        label.htmlFor = button.id;
+    }
+
+    const state = {
+        id: selectElement.id,
+        title,
+        emptyLabel,
+        root,
+        button,
+        summarySpan,
+        panel,
+        selected: new Set(),
+        options: [],
+        isOpen: false
+    };
+
+    button.addEventListener("click", (event) => {
+        event.stopPropagation();
+        toggleDropdown(state);
+    });
+
+    panel.addEventListener("click", (event) => {
+        event.stopPropagation();
+    });
+
+    return state;
+}
+
+function toggleDropdown(state, forceOpen) {
+    if (!state) {
+        return;
+    }
+
+    const nextOpen = typeof forceOpen === "boolean" ? forceOpen : !state.isOpen;
+    state.isOpen = nextOpen;
+    state.panel.hidden = !nextOpen;
+    state.root.classList.toggle("is-open", nextOpen);
+    state.button.setAttribute("aria-expanded", String(nextOpen));
+}
+
+function closeAllDropdowns() {
+    if (movieSiteFilterDropdown) {
+        closeDropdown(movieSiteFilterDropdown);
+    }
+}
+
+function closeDropdown(state) {
+    if (!state) {
+        return;
+    }
+
+    state.isOpen = false;
+    state.panel.hidden = true;
+    state.root.classList.remove("is-open");
+    state.button.setAttribute("aria-expanded", "false");
+}
+
+function setDropdownOptions(state, options) {
+    if (!state) {
+        return;
+    }
+
+    state.options = options;
+    const validValues = new Set(options.map((option) => option.value));
+    state.selected = new Set(Array.from(state.selected).filter((value) => validValues.has(value)));
+    renderDropdown(state);
+}
+
+function renderDropdown(state) {
+    if (!state) {
+        return;
+    }
+
+    const sortedOptions = [...state.options].sort((left, right) => {
+        const leftSelected = state.selected.has(left.value);
+        const rightSelected = state.selected.has(right.value);
+
+        if (leftSelected !== rightSelected) {
+            return leftSelected ? -1 : 1;
+        }
+
+        return left.label.localeCompare(right.label);
+    });
+
+    state.panel.innerHTML = "";
+
+    if (sortedOptions.length === 0) {
+        const emptyState = document.createElement("div");
+        emptyState.className = "checkbox-dropdown-empty";
+        emptyState.textContent = "No options";
+        state.panel.appendChild(emptyState);
+        updateDropdownSummary(state);
+        return;
+    }
+
+    sortedOptions.forEach((option) => {
+        const optionLabel = document.createElement("label");
+        optionLabel.className = "checkbox-dropdown-option";
+        if (state.selected.has(option.value)) {
+            optionLabel.classList.add("is-selected");
+        }
+
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.value = option.value;
+        checkbox.checked = state.selected.has(option.value);
+
+        const text = document.createElement("span");
+        text.textContent = option.label;
+
+        checkbox.addEventListener("change", () => {
+            if (checkbox.checked) {
+                state.selected.add(option.value);
+            } else {
+                state.selected.delete(option.value);
+            }
+
+            renderDropdown(state);
+            applyMovieFilters();
+        });
+
+        optionLabel.append(checkbox, text);
+        state.panel.appendChild(optionLabel);
+    });
+
+    updateDropdownSummary(state);
+}
+
+function updateDropdownSummary(state) {
+    if (!state) {
+        return;
+    }
+
+    const selectedCount = state.selected.size;
+    state.summarySpan.textContent = selectedCount === 0 ? state.emptyLabel : `${selectedCount} selected`;
+    state.root.classList.toggle("has-selection", selectedCount > 0);
 }
 
 async function loadData() {
@@ -112,16 +312,6 @@ function splitCommaSeparated(value) {
     return value ? value.split(',').map(item => item.trim()).filter(Boolean) : [];
 }
 
-function getSelectedValues(selectElement) {
-    return Array.from(selectElement.selectedOptions).map(option => option.value);
-}
-
-function clearMultiSelect(selectElement) {
-    Array.from(selectElement.options).forEach(option => {
-        option.selected = false;
-    });
-}
-
 function getMovieSiteValues(movies) {
     const sites = Array.isArray(movies)
         ? movies
@@ -158,8 +348,6 @@ function getLinkValue(url) {
 }
 
 function populateMovieFilters() {
-    movieSiteFilter.innerHTML = '';
-
     const siteOptions = Array.from(
         new Map(
             getMovieSiteValues(currentStar.movies)
@@ -169,16 +357,11 @@ function populateMovieFilters() {
         .map(([value, label]) => ({ value, label }))
         .sort((a, b) => a.label.localeCompare(b.label));
 
-    siteOptions.forEach(site => {
-        const option = document.createElement('option');
-        option.value = site.value;
-        option.textContent = site.label;
-        movieSiteFilter.appendChild(option);
-    });
+    setDropdownOptions(movieSiteFilterDropdown, siteOptions);
 }
 
 function applyMovieFilters() {
-    const selectedSites = new Set(getSelectedValues(movieSiteFilter));
+    const selectedSites = new Set(movieSiteFilterDropdown?.selected || []);
 
     filteredMovies = currentStar.movies.filter(movie => {
         const movieSites = getMovieSiteValues([movie]);
@@ -193,7 +376,10 @@ function applyMovieFilters() {
 }
 
 function resetMovieFilters() {
-    clearMultiSelect(movieSiteFilter);
+    if (movieSiteFilterDropdown) {
+        movieSiteFilterDropdown.selected.clear();
+        renderDropdown(movieSiteFilterDropdown);
+    }
     applyMovieFilters();
 }
 
@@ -421,12 +607,24 @@ function openAddMovieModal() {
     addMovieModal.classList.add('show');
 }
 
+// Open edit star modal
+function openEditStarModal() {
+    document.getElementById('editStarName').value = currentStar.name;
+    document.getElementById('editStarPictureUrl').value = currentStar.pictureUrl;
+    editStarModal.classList.add('show');
+}
+
 // Close modal
-function closeModal() {
+function closeMovieModalDialog() {
     addMovieModal.classList.remove('show');
     addMovieForm.reset();
     editingMovieIndex = null;
-    document.querySelector('.modal-content h2').textContent = 'Add New Movie';
+    addMovieModal.querySelector('.modal-content h2').textContent = 'Add New Movie';
+}
+
+function closeEditStarModalDialog() {
+    editStarModal.classList.remove('show');
+    editStarForm.reset();
 }
 
 // Handle add movie
@@ -486,10 +684,53 @@ async function handleAddMovie(e) {
     }
 
     saveData();
-    closeModal();
+    closeMovieModal();
     updateMovieCount();
     populateMovieFilters();
     applyMovieFilters();
+}
+
+// Handle edit star
+async function handleEditStar(e) {
+    e.preventDefault();
+
+    const name = document.getElementById('editStarName').value.trim();
+    const pictureUrl = document.getElementById('editStarPictureUrl').value.trim();
+
+    if (!name) {
+        alert('Star name is required!');
+        return;
+    }
+    if (!pictureUrl) {
+        alert('Picture URL is required!');
+        return;
+    }
+
+    currentStar.name = name;
+    currentStar.pictureUrl = pictureUrl;
+
+    try {
+        const response = await fetch(`${API_URL}/stars/${currentStar.id}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ name, pictureUrl })
+        });
+
+        if (!response.ok) {
+            throw new Error('Server error');
+        }
+    } catch (error) {
+        console.log('Server not running or update failed, saving to localStorage only...');
+    }
+
+    saveData();
+    closeEditStarModalDialog();
+    starTitle.textContent = name;
+    starNameElement.textContent = name;
+    starImage.src = pictureUrl;
+    populateMovieFilters();
 }
 
 // Edit movie
@@ -503,7 +744,7 @@ function editMovie(index) {
     document.getElementById('previewVideoUrl').value = movie.previewVideoUrl || '';
     document.getElementById('movieImages').value = movie.images || '';
 
-    document.querySelector('.modal-content h2').textContent = 'Edit Movie';
+    addMovieModal.querySelector('.modal-content h2').textContent = 'Edit Movie';
     openAddMovieModal();
 }
 
