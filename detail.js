@@ -341,6 +341,10 @@ function splitCommaSeparated(value) {
     return value ? value.split(',').map(item => item.trim()).filter(Boolean) : [];
 }
 
+function getSingleUrl(value) {
+    return value ? String(value).trim() : '';
+}
+
 function getMovieSiteValues(movies) {
     const sites = Array.isArray(movies)
         ? movies
@@ -446,8 +450,7 @@ function resetMovieFilters() {
 
 function createThumbnail(movie, index) {
     const images = splitCommaSeparated(movie.images);
-    const previewUrls = splitCommaSeparated(movie.previewVideoUrl);
-    const previewUrl = previewUrls[0] || '';
+    const previewUrl = getSingleUrl(movie.previewVideoUrl);
     const hasImages = images.length > 0;
     const hasPreview = Boolean(previewUrl);
 
@@ -500,6 +503,15 @@ function createFixedButtonRow(className, buttonsHTML, placeholderLabel) {
     `;
 }
 
+function createSitePreviewButtonRow(siteButtonHTML, previewButtonHTML) {
+    return `
+        <div class="movie-buttons-row fixed-row site-preview-row">
+            ${siteButtonHTML}
+            ${previewButtonHTML || '<button class="btn-placeholder" type="button" disabled aria-disabled="true">Preview</button>'}
+        </div>
+    `;
+}
+
 function renderMovies() {
     moviesGrid.innerHTML = '';
 
@@ -516,24 +528,14 @@ function renderMovies() {
         movieCard.className = 'movie-card';
 
         const images = splitCommaSeparated(movie.images);
-        const previewUrls = splitCommaSeparated(movie.previewVideoUrl);
         const watchUrls = splitCommaSeparated(movie.videoUrl);
         const siteLink = getLinkValue(movie.siteName || '');
         const siteDomain = extractDomainName(movie.siteName || movie.siteNameLink || movie.siteUrl || '');
-        const previewUrl = previewUrls[0] || '';
+        const previewUrl = getSingleUrl(movie.previewVideoUrl);
 
-        const siteButtonHTML = createFixedButtonRow(
-            'site-button-row',
+        const sitePreviewButtonsHTML = createSitePreviewButtonRow(
             `<button class="btn-site" data-open-url="${siteLink}">${siteDomain}</button>`,
-            'Site'
-        );
-
-        const previewButtonsHTML = createFixedButtonRow(
-            'preview-button-row',
-            previewUrls.length > 0
-                ? previewUrls.map(url => `<button class="btn-preview" data-open-url="${url}">Preview</button>`).join('')
-                : '',
-            'Preview'
+            previewUrl ? `<button class="btn-preview" data-open-url="${previewUrl}">Preview</button>` : ''
         );
 
         const watchButtonsHTML = createFixedButtonRow(
@@ -556,8 +558,7 @@ function renderMovies() {
             <div class="movie-info">
                 <h4>${movie.videoTitle}</h4>
                 ${images.length > 0 ? `<p><strong>Images:</strong> ${images.length} image${images.length !== 1 ? 's' : ''}</p>` : '<p class="movie-info-placeholder">&nbsp;</p>'}
-                ${siteButtonHTML}
-                ${previewButtonsHTML}
+                ${sitePreviewButtonsHTML}
                 ${watchButtonsHTML}
                 ${actionButtonsHTML}
             </div>

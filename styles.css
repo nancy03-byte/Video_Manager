@@ -758,13 +758,20 @@ body {
     align-items: stretch;
 }
 
-.site-button-row {
-    margin-bottom: 12px;
-}
-
-.preview-button-row,
+.site-preview-row,
 .video-button-row {
     margin-bottom: 8px;
+}
+
+.site-preview-row {
+    flex-wrap: nowrap;
+}
+
+.site-preview-row .btn-site,
+.site-preview-row .btn-preview,
+.site-preview-row .btn-placeholder {
+    flex: 1 1 0;
+    min-width: 0;
 }
 
 .action-buttons-row {
