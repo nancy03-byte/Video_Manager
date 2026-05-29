@@ -11,6 +11,7 @@ const addStarModal = document.getElementById("addStarModal");
 const closeAddModal = document.getElementById("closeAddModal");
 const addStarForm = document.getElementById("addStarForm");
 const resetFiltersBtn = document.getElementById("resetFiltersBtn");
+const themeToggleBtn = document.getElementById("themeToggleBtn");
 
 // Global data
 let starsData = [];
@@ -19,6 +20,7 @@ const filterDropdowns = { star: null, site: null };
 
 // Initialize app
 document.addEventListener("DOMContentLoaded", async () => {
+    loadTheme();
     setupFilterDropdowns();
     await loadData();
     setupEventListeners();
@@ -31,6 +33,7 @@ function setupEventListeners() {
     addStarForm.addEventListener("submit", handleAddStar);
     searchInput.addEventListener("input", applyFilters);
     resetFiltersBtn.addEventListener("click", resetFilters);
+    themeToggleBtn?.addEventListener("click", toggleTheme);
 
     document.addEventListener("click", handleDocumentClick);
     window.addEventListener("click", (e) => {
@@ -426,6 +429,7 @@ function openAddModal() {
 function closeModal() {
     addStarModal.classList.remove("show");
     addStarForm.reset();
+    document.getElementById("starBackgroundUrl").value = "";
 }
 
 // Handle add star
@@ -435,13 +439,15 @@ async function handleAddStar(e) {
     const name = document.getElementById("starName").value;
     const pictureUrl = document.getElementById("starPictureUrl").value;
 
+    const backgroundImageUrl = document.getElementById("starBackgroundUrl").value.trim();
+
     try {
         const response = await fetch(`${API_URL}/stars`, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json"
             },
-            body: JSON.stringify({ name, pictureUrl })
+            body: JSON.stringify({ name, pictureUrl, backgroundImageUrl })
         });
 
         if (response.ok) {
@@ -457,6 +463,7 @@ async function handleAddStar(e) {
             id: Date.now(),
             name,
             pictureUrl,
+            backgroundImageUrl,
             movies: []
         };
         starsData.push(newStar);
@@ -510,6 +517,25 @@ function normalizeSiteFilterValue(value) {
             .split("/")[0]
             .trim()
             .toLowerCase();
+    }
+}
+
+function loadTheme() {
+    const savedTheme = localStorage.getItem("theme") || "light";
+    applyTheme(savedTheme);
+}
+
+function toggleTheme() {
+    const currentTheme = document.body.dataset.theme || "light";
+    const nextTheme = currentTheme === "dark" ? "light" : "dark";
+    applyTheme(nextTheme);
+}
+
+function applyTheme(theme) {
+    document.body.dataset.theme = theme;
+    localStorage.setItem("theme", theme);
+    if (themeToggleBtn) {
+        themeToggleBtn.textContent = theme === "dark" ? "Light Mode" : "Dark Mode";
     }
 }
 

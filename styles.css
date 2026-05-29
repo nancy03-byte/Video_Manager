@@ -21,6 +21,91 @@ body {
     overflow-x: hidden;
 }
 
+:root {
+    --bg: #f4f7fb;
+    --surface: #ffffff;
+    --surface-strong: #f9fafb;
+    --text: #1f2937;
+    --muted: #6b7280;
+    --border: #dde6f0;
+    --btn-primary: #667eea;
+    --btn-primary-hover: #5568d3;
+    --btn-danger: #e74c3c;
+    --btn-danger-hover: #c0392b;
+    --panel: rgba(255,255,255,0.92);
+}
+
+body[data-theme='dark'] {
+    background: #111827;
+    color: #e5e7eb;
+}
+
+body[data-theme='dark'] .container,
+body[data-theme='dark'] .header,
+body[data-theme='dark'] .filters-section,
+body[data-theme='dark'] .movies-section,
+body[data-theme='dark'] .movie-card,
+body[data-theme='dark'] .star-card,
+body[data-theme='dark'] .modal-content {
+    background: #1f2937;
+    color: #e5e7eb;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.35);
+}
+
+body[data-theme='dark'] .star-detail-info {
+    background-color: rgba(15, 23, 42, 0.88);
+    color: #e5e7eb;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.35);
+}
+
+body[data-theme='dark'] .header h1,
+body[data-theme='dark'] .star-detail-text h2,
+body[data-theme='dark'] .star-card-content h3,
+body[data-theme='dark'] .star-card-content p,
+body[data-theme='dark'] .movie-info h4,
+body[data-theme='dark'] .movie-info p,
+body[data-theme='dark'] .filter-group label,
+body[data-theme='dark'] .filters-section p,
+body[data-theme='dark'] .movie-card p {
+    color: #e5e7eb;
+}
+
+body[data-theme='dark'] .filter-group select,
+body[data-theme='dark'] .filter-group input,
+body[data-theme='dark'] textarea {
+    background: #111827;
+    color: #e5e7eb;
+    border-color: #374151;
+}
+
+body[data-theme='dark'] .btn {
+    color: #f9fafb;
+}
+
+body[data-theme='dark'] .btn-add {
+    background: #4f46e5;
+}
+
+body[data-theme='dark'] .btn-reset {
+    background: #ef4444;
+}
+
+body[data-theme='dark'] .btn-back {
+    background: #6b7280;
+}
+
+body[data-theme='dark'] .btn-edit {
+    background: #2563eb;
+}
+
+body[data-theme='dark'] .btn-delete-star {
+    background: #dc2626;
+}
+
+body[data-theme='dark'] .theme-toggle-btn {
+    background: #6b7280;
+}
+
 .container {
     width: 100%;
     min-height: 100vh;
@@ -53,11 +138,22 @@ body {
     overflow-wrap: anywhere;
 }
 
-.header-buttons {
+.header-buttons,
+.header-actions {
     display: flex;
     gap: 10px;
     flex-wrap: wrap;
     justify-content: flex-end;
+    align-items: center;
+}
+
+.theme-toggle-btn {
+    background: #374151;
+    color: white;
+}
+
+.theme-toggle-btn:hover {
+    background: #4b5563;
 }
 
 /* Buttons */
@@ -408,7 +504,11 @@ body {
 
 /* Star Detail Info */
 .star-detail-info {
-    background: white;
+    position: relative;
+    background-color: rgba(255, 255, 255, 0.92);
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
     padding: 30px;
     border-radius: 10px;
     display: flex;
@@ -417,6 +517,28 @@ body {
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
     align-items: flex-start;
     width: 100%;
+    overflow: hidden;
+}
+
+.star-detail-info.has-background {
+    background-color: transparent;
+}
+
+.star-detail-info::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, rgba(255,255,255,0.85), rgba(255,255,255,0.92));
+    pointer-events: none;
+}
+
+.star-detail-info.has-background::before {
+    background: linear-gradient(180deg, rgba(255,255,255,0.55), rgba(255,255,255,0.58));
+}
+
+.star-detail-info > * {
+    position: relative;
+    z-index: 1;
 }
 
 .star-detail-image {

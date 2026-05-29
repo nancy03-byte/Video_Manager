@@ -13,6 +13,8 @@
             <button class="btn btn-back" id="backBtn">← Back to Library</button>
             <h1 id="starTitle">Star Details</h1>
             <div class="header-buttons">
+                <button class="btn theme-toggle-btn" id="themeToggleBtn" type="button">Dark Mode</button>
+                <button class="btn btn-add" id="addMovieBtn">+ Add Movie</button>
                 <button class="btn btn-edit" id="editStarBtn">Edit Star</button>
                 <button class="btn btn-delete-star" id="deleteStarBtn">Delete Star</button>
             </div>
@@ -123,6 +125,10 @@
                 <div class="form-group">
                     <label for="editStarPictureUrl">Picture URL:</label>
                     <input type="url" id="editStarPictureUrl" required>
+                </div>
+                <div class="form-group">
+                    <label for="editStarBackgroundUrl">Background Image URL:</label>
+                    <input type="url" id="editStarBackgroundUrl" placeholder="https://example.com/background.jpg">
                 </div>
                 <button type="submit" class="btn btn-submit">Save Changes</button>
             </form>

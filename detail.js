@@ -6,6 +6,7 @@ const backBtn = document.getElementById('backBtn');
 const addMovieBtn = document.getElementById('addMovieBtn');
 const editStarBtn = document.getElementById('editStarBtn');
 const deleteStarBtn = document.getElementById('deleteStarBtn');
+const themeToggleBtn = document.getElementById('themeToggleBtn');
 const addMovieModal = document.getElementById('addMovieModal');
 const closeMovieModal = document.getElementById('closeMovieModal');
 const addMovieForm = document.getElementById('addMovieForm');
@@ -38,6 +39,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const params = new URLSearchParams(window.location.search);
     const starId = parseInt(params.get('starId'));
 
+    loadTheme();
     setupMovieFilterDropdown();
     setupMovieColumns();
     await loadData();
@@ -51,6 +53,7 @@ function setupEventListeners() {
     addMovieBtn.addEventListener('click', openAddMovieModal);
     editStarBtn.addEventListener('click', openEditStarModal);
     deleteStarBtn.addEventListener('click', deleteStar);
+    themeToggleBtn?.addEventListener('click', toggleTheme);
     closeMovieModal.addEventListener('click', () => closeMovieModalDialog());
     closeEditStarModal.addEventListener('click', () => closeEditStarModalDialog());
     addMovieForm.addEventListener('submit', handleAddMovie);
@@ -355,6 +358,22 @@ function loadStarDetails(starId) {
     starImage.onerror = () => {
         starImage.src = 'https://via.placeholder.com/250x300?text=Image+Not+Found';
     };
+
+    const starDetailInfo = document.querySelector('.star-detail-info');
+    if (starDetailInfo) {
+        const backgroundUrl = currentStar.backgroundImageUrl || currentStar.pictureUrl;
+        if (backgroundUrl) {
+            starDetailInfo.style.backgroundImage = `linear-gradient(rgba(255,255,255,0.72), rgba(255,255,255,0.72)), url('${backgroundUrl}')`;
+            starDetailInfo.classList.add('has-background');
+        } else {
+            starDetailInfo.style.backgroundImage = '';
+            starDetailInfo.classList.remove('has-background');
+        }
+        starDetailInfo.style.backgroundSize = 'cover';
+        starDetailInfo.style.backgroundPosition = 'center';
+        starDetailInfo.style.backgroundRepeat = 'no-repeat';
+    }
+
 
     updateMovieCount();
     populateMovieFilters();
@@ -828,6 +847,7 @@ function getLastMovieSiteName() {
 function openEditStarModal() {
     document.getElementById('editStarName').value = currentStar.name;
     document.getElementById('editStarPictureUrl').value = currentStar.pictureUrl;
+    document.getElementById('editStarBackgroundUrl').value = currentStar.backgroundImageUrl || '';
     editStarModal.classList.add('show');
 }
 
@@ -918,6 +938,7 @@ async function handleEditStar(e) {
 
     const name = document.getElementById('editStarName').value.trim();
     const pictureUrl = document.getElementById('editStarPictureUrl').value.trim();
+    const backgroundImageUrl = document.getElementById('editStarBackgroundUrl').value.trim();
 
     if (!name) {
         alert('Star name is required!');
@@ -930,6 +951,7 @@ async function handleEditStar(e) {
 
     currentStar.name = name;
     currentStar.pictureUrl = pictureUrl;
+    currentStar.backgroundImageUrl = backgroundImageUrl;
 
     try {
         const response = await fetch(`${API_URL}/stars/${currentStar.id}`, {
@@ -937,7 +959,7 @@ async function handleEditStar(e) {
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ name, pictureUrl })
+            body: JSON.stringify({ name, pictureUrl, backgroundImageUrl })
         });
 
         if (!response.ok) {
@@ -952,6 +974,22 @@ async function handleEditStar(e) {
     starTitle.textContent = name;
     starNameElement.textContent = name;
     starImage.src = pictureUrl;
+
+    const starDetailInfo = document.querySelector('.star-detail-info');
+    if (starDetailInfo) {
+        const backgroundUrl = currentStar.backgroundImageUrl || currentStar.pictureUrl;
+        if (backgroundUrl) {
+            starDetailInfo.style.backgroundImage = `linear-gradient(rgba(255,255,255,0.72), rgba(255,255,255,0.72)), url('${backgroundUrl}')`;
+            starDetailInfo.classList.add('has-background');
+        } else {
+            starDetailInfo.style.backgroundImage = '';
+            starDetailInfo.classList.remove('has-background');
+        }
+        starDetailInfo.style.backgroundSize = 'cover';
+        starDetailInfo.style.backgroundPosition = 'center';
+        starDetailInfo.style.backgroundRepeat = 'no-repeat';
+    }
+
     populateMovieFilters();
 }
 
@@ -999,6 +1037,25 @@ async function deleteMovie(index) {
 // Save data to localStorage
 function saveData() {
     localStorage.setItem('starsData', JSON.stringify(starsData));
+}
+
+function loadTheme() {
+    const savedTheme = localStorage.getItem('theme') || 'light';
+    applyTheme(savedTheme);
+}
+
+function toggleTheme() {
+    const currentTheme = document.body.dataset.theme || 'light';
+    const nextTheme = currentTheme === 'dark' ? 'light' : 'dark';
+    applyTheme(nextTheme);
+}
+
+function applyTheme(theme) {
+    document.body.dataset.theme = theme;
+    localStorage.setItem('theme', theme);
+    if (themeToggleBtn) {
+        themeToggleBtn.textContent = theme === 'dark' ? 'Light Mode' : 'Dark Mode';
+    }
 }
 
 // Delete star

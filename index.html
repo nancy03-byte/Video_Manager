@@ -11,7 +11,10 @@
         <!-- Header -->
         <header class="header">
             <h1>Star Library</h1>
-            <button class="btn btn-add" id="addStarBtn">+ Add Star</button>
+            <div class="header-actions">
+                <button class="btn theme-toggle-btn" id="themeToggleBtn" type="button">Dark Mode</button>
+                <button class="btn btn-add" id="addStarBtn">+ Add Star</button>
+            </div>
         </header>
 
         <!-- Filters Section -->
@@ -53,6 +56,10 @@
                 <div class="form-group">
                     <label for="starPictureUrl">Picture URL:</label>
                     <input type="url" id="starPictureUrl" required>
+                </div>
+                <div class="form-group">
+                    <label for="starBackgroundUrl">Background Image URL:</label>
+                    <input type="url" id="starBackgroundUrl" placeholder="https://example.com/background.jpg">
                 </div>
                 <button type="submit" class="btn btn-submit">Add Star</button>
             </form>
