@@ -570,6 +570,9 @@ function renderMovies() {
         const previewVideo = movieCard.querySelector('.preview-video-element');
         if (previewVideo) {
             const hasImages = images.length > 0;
+            if (!hasImages) {
+                playPreviewVideo(previewVideo);
+            }
             movieCard.addEventListener('mouseenter', () => {
                 if (hasImages) {
                     stopSlideshow(movieIndex);
