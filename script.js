@@ -85,7 +85,8 @@ function createCheckboxDropdown(selectElement, { title, emptyLabel }) {
 
     const caretSpan = document.createElement("span");
     caretSpan.className = "checkbox-dropdown-caret";
-    caretSpan.textContent = "▾";
+    caretSpan.setAttribute("aria-hidden", "true");
+    caretSpan.textContent = "v";
 
     button.append(titleSpan, summarySpan, caretSpan);
 
@@ -207,6 +208,12 @@ function getStarSiteValues(star) {
     return Array.from(new Set(sites));
 }
 
+function getStarSiteFilterValues(star) {
+    return getStarSiteValues(star)
+        .map(normalizeSiteFilterValue)
+        .filter(Boolean);
+}
+
 function getSelectedValuesFromDropdown(state) {
     return Array.from(state?.selected || []);
 }
@@ -249,6 +256,22 @@ function renderDropdown(state) {
         return;
     }
 
+    const actions = document.createElement("div");
+    actions.className = "checkbox-dropdown-actions";
+
+    const clearButton = document.createElement("button");
+    clearButton.type = "button";
+    clearButton.textContent = "Clear";
+    clearButton.disabled = state.selected.size === 0;
+    clearButton.addEventListener("click", () => {
+        state.selected.clear();
+        renderDropdown(state);
+        applyFilters();
+    });
+
+    actions.appendChild(clearButton);
+    state.panel.appendChild(actions);
+
     sortedOptions.forEach((option) => {
         const optionLabel = document.createElement("label");
         optionLabel.className = "checkbox-dropdown-option";
@@ -262,6 +285,7 @@ function renderDropdown(state) {
         checkbox.checked = state.selected.has(option.value);
 
         const text = document.createElement("span");
+        text.className = "checkbox-dropdown-option-label";
         text.textContent = option.label;
 
         checkbox.addEventListener("change", () => {
@@ -288,7 +312,18 @@ function updateDropdownSummary(state) {
     }
 
     const selectedCount = state.selected.size;
-    state.summarySpan.textContent = selectedCount === 0 ? state.emptyLabel : `${selectedCount} selected`;
+    if (selectedCount === 0) {
+        state.summarySpan.textContent = state.emptyLabel;
+    } else {
+        const selectedLabels = state.options
+            .filter((option) => state.selected.has(option.value))
+            .map((option) => option.label);
+        const visibleLabels = selectedLabels.slice(0, 2).join(", ");
+        const remainingCount = selectedCount - 2;
+        state.summarySpan.textContent = remainingCount > 0
+            ? `${visibleLabels} +${remainingCount}`
+            : visibleLabels;
+    }
     state.root.classList.toggle("has-selection", selectedCount > 0);
 }
 
@@ -306,14 +341,17 @@ function populateFilters() {
 
     setDropdownOptions(filterDropdowns.star, starOptions);
 
-    const siteOptions = Array.from(
-        new Map(
-            starsData
-                .flatMap((star) => getStarSiteValues(star))
-                .filter(Boolean)
-                .map((site) => [site, extractDomainName(site)])
-        ).entries()
-    )
+    const siteOptionsByValue = new Map();
+    starsData
+        .flatMap((star) => getStarSiteValues(star))
+        .forEach((site) => {
+            const value = normalizeSiteFilterValue(site);
+            if (value && !siteOptionsByValue.has(value)) {
+                siteOptionsByValue.set(value, extractDomainName(site));
+            }
+        });
+
+    const siteOptions = Array.from(siteOptionsByValue.entries())
         .map(([value, label]) => ({ value, label }))
         .sort((a, b) => a.label.localeCompare(b.label));
 
@@ -356,7 +394,7 @@ function applyFilters() {
         const matchesStars = selectedStarIds.size === 0 || selectedStarIds.has(String(star.id));
         const matchesSites =
             selectedSites.size === 0 ||
-            getStarSiteValues(star).some((site) => selectedSites.has(site));
+            getStarSiteFilterValues(star).some((site) => selectedSites.has(site));
 
         return matchesSearch && matchesStars && matchesSites;
     });
@@ -448,6 +486,30 @@ function extractDomainName(value) {
         const parts = cleanValue.split(".").filter(Boolean);
         const domainPart = parts.length >= 2 ? parts[parts.length - 2] : parts[0] || cleanValue;
         return domainPart.charAt(0).toUpperCase() + domainPart.slice(1);
+    }
+}
+
+function normalizeSiteFilterValue(value) {
+    if (!value) {
+        return "";
+    }
+
+    const trimmedValue = String(value).trim();
+    if (!trimmedValue) {
+        return "";
+    }
+
+    try {
+        const normalizedValue = trimmedValue.includes("://") ? trimmedValue : `https://${trimmedValue}`;
+        const urlObj = new URL(normalizedValue);
+        return urlObj.hostname.replace(/^www\./i, "").toLowerCase();
+    } catch (error) {
+        return trimmedValue
+            .replace(/^https?:\/\//i, "")
+            .replace(/^www\./i, "")
+            .split("/")[0]
+            .trim()
+            .toLowerCase();
     }
 }
 

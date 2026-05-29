@@ -96,7 +96,8 @@ function createCheckboxDropdown(selectElement, { title, emptyLabel }) {
 
     const caretSpan = document.createElement("span");
     caretSpan.className = "checkbox-dropdown-caret";
-    caretSpan.textContent = "▾";
+    caretSpan.setAttribute("aria-hidden", "true");
+    caretSpan.textContent = "v";
 
     button.append(titleSpan, summarySpan, caretSpan);
 
@@ -204,6 +205,22 @@ function renderDropdown(state) {
         return;
     }
 
+    const actions = document.createElement("div");
+    actions.className = "checkbox-dropdown-actions";
+
+    const clearButton = document.createElement("button");
+    clearButton.type = "button";
+    clearButton.textContent = "Clear";
+    clearButton.disabled = state.selected.size === 0;
+    clearButton.addEventListener("click", () => {
+        state.selected.clear();
+        renderDropdown(state);
+        applyMovieFilters();
+    });
+
+    actions.appendChild(clearButton);
+    state.panel.appendChild(actions);
+
     sortedOptions.forEach((option) => {
         const optionLabel = document.createElement("label");
         optionLabel.className = "checkbox-dropdown-option";
@@ -217,6 +234,7 @@ function renderDropdown(state) {
         checkbox.checked = state.selected.has(option.value);
 
         const text = document.createElement("span");
+        text.className = "checkbox-dropdown-option-label";
         text.textContent = option.label;
 
         checkbox.addEventListener("change", () => {
@@ -243,7 +261,18 @@ function updateDropdownSummary(state) {
     }
 
     const selectedCount = state.selected.size;
-    state.summarySpan.textContent = selectedCount === 0 ? state.emptyLabel : `${selectedCount} selected`;
+    if (selectedCount === 0) {
+        state.summarySpan.textContent = state.emptyLabel;
+    } else {
+        const selectedLabels = state.options
+            .filter((option) => state.selected.has(option.value))
+            .map((option) => option.label);
+        const visibleLabels = selectedLabels.slice(0, 2).join(", ");
+        const remainingCount = selectedCount - 2;
+        state.summarySpan.textContent = remainingCount > 0
+            ? `${visibleLabels} +${remainingCount}`
+            : visibleLabels;
+    }
     state.root.classList.toggle("has-selection", selectedCount > 0);
 }
 
@@ -322,6 +351,12 @@ function getMovieSiteValues(movies) {
     return Array.from(new Set(sites));
 }
 
+function getMovieSiteFilterValues(movies) {
+    return getMovieSiteValues(movies)
+        .map(normalizeSiteFilterValue)
+        .filter(Boolean);
+}
+
 // Utility: Extract domain name from URL or plain domain
 function extractDomainName(value) {
     if (!value) {
@@ -343,17 +378,44 @@ function extractDomainName(value) {
     }
 }
 
+function normalizeSiteFilterValue(value) {
+    if (!value) {
+        return '';
+    }
+
+    const trimmedValue = String(value).trim();
+    if (!trimmedValue) {
+        return '';
+    }
+
+    try {
+        const normalizedValue = trimmedValue.includes('://') ? trimmedValue : `https://${trimmedValue}`;
+        const urlObj = new URL(normalizedValue);
+        return urlObj.hostname.replace(/^www\./i, '').toLowerCase();
+    } catch (error) {
+        return trimmedValue
+            .replace(/^https?:\/\//i, '')
+            .replace(/^www\./i, '')
+            .split('/')[0]
+            .trim()
+            .toLowerCase();
+    }
+}
+
 function getLinkValue(url) {
     return url.includes('://') ? url : `https://${url}`;
 }
 
 function populateMovieFilters() {
-    const siteOptions = Array.from(
-        new Map(
-            getMovieSiteValues(currentStar.movies)
-                .map(site => [site, extractDomainName(site)])
-        ).entries()
-    )
+    const siteOptionsByValue = new Map();
+    getMovieSiteValues(currentStar.movies).forEach(site => {
+        const value = normalizeSiteFilterValue(site);
+        if (value && !siteOptionsByValue.has(value)) {
+            siteOptionsByValue.set(value, extractDomainName(site));
+        }
+    });
+
+    const siteOptions = Array.from(siteOptionsByValue.entries())
         .map(([value, label]) => ({ value, label }))
         .sort((a, b) => a.label.localeCompare(b.label));
 
@@ -364,10 +426,9 @@ function applyMovieFilters() {
     const selectedSites = new Set(movieSiteFilterDropdown?.selected || []);
 
     filteredMovies = currentStar.movies.filter(movie => {
-        const movieSites = getMovieSiteValues([movie]);
         const matchesSites =
             selectedSites.size === 0 ||
-            movieSites.some(site => selectedSites.has(site));
+            getMovieSiteFilterValues([movie]).some(site => selectedSites.has(site));
 
         return matchesSites;
     });
