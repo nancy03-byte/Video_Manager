@@ -12,7 +12,10 @@ body {
 
 body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: #1f2937;
+    background:
+        linear-gradient(135deg, rgba(82, 113, 255, 0.88), rgba(116, 75, 162, 0.86)),
+        #f4f7fb;
     min-height: 100vh;
     width: 100%;
     overflow-x: hidden;
@@ -46,11 +49,15 @@ body {
     flex: 1;
     text-align: center;
     margin: 0;
+    line-height: 1.2;
+    overflow-wrap: anywhere;
 }
 
 .header-buttons {
     display: flex;
     gap: 10px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
 }
 
 /* Buttons */
@@ -62,6 +69,9 @@ body {
     font-size: 16px;
     transition: all 0.3s ease;
     font-weight: 500;
+    min-height: 40px;
+    line-height: 1.2;
+    white-space: nowrap;
 }
 
 .btn-add {
@@ -134,6 +144,7 @@ body {
     flex-direction: column;
     gap: 8px;
     min-width: 220px;
+    flex: 1 1 220px;
 }
 
 .search-group {
@@ -153,6 +164,7 @@ body {
     border-radius: 5px;
     font-size: 14px;
     transition: border-color 0.3s;
+    width: 100%;
 }
 
 .filter-group select[multiple] {
@@ -161,10 +173,120 @@ body {
 }
 
 .filter-group select:focus,
-.filter-group input:focus {
+.filter-group input:focus,
+.checkbox-dropdown-trigger:focus {
     outline: none;
     border-color: #667eea;
     box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.1);
+}
+
+.checkbox-dropdown {
+    position: relative;
+    width: 100%;
+}
+
+.checkbox-dropdown-trigger {
+    width: 100%;
+    min-height: 40px;
+    padding: 8px 12px;
+    border: 1px solid #d7dce4;
+    border-radius: 5px;
+    background: #fff;
+    color: #1f2937;
+    cursor: pointer;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 2px 10px;
+    text-align: left;
+    align-items: center;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.checkbox-dropdown-title,
+.checkbox-dropdown-summary {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.checkbox-dropdown-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: #374151;
+}
+
+.checkbox-dropdown-summary {
+    grid-column: 1;
+    font-size: 13px;
+    color: #6b7280;
+}
+
+.checkbox-dropdown-caret {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    color: #667eea;
+    font-size: 14px;
+    transition: transform 0.2s ease;
+}
+
+.checkbox-dropdown.is-open .checkbox-dropdown-caret {
+    transform: rotate(180deg);
+}
+
+.checkbox-dropdown.has-selection .checkbox-dropdown-summary {
+    color: #4f46e5;
+    font-weight: 600;
+}
+
+.checkbox-dropdown-menu {
+    position: absolute;
+    z-index: 50;
+    top: calc(100% + 6px);
+    left: 0;
+    right: 0;
+    max-height: 240px;
+    overflow-y: auto;
+    padding: 8px;
+    background: white;
+    border: 1px solid #d7dce4;
+    border-radius: 8px;
+    box-shadow: 0 14px 35px rgba(17, 24, 39, 0.18);
+}
+
+.checkbox-dropdown-option {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 10px;
+    border-radius: 6px;
+    color: #374151;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.checkbox-dropdown-option:hover,
+.checkbox-dropdown-option.is-selected {
+    background: #eef2ff;
+}
+
+.checkbox-dropdown-option input {
+    width: 16px;
+    height: 16px;
+    accent-color: #667eea;
+    flex: 0 0 auto;
+}
+
+.checkbox-dropdown-option span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.checkbox-dropdown-empty {
+    padding: 12px;
+    color: #6b7280;
+    font-size: 14px;
 }
 
 .checkboxes-group {
@@ -213,6 +335,7 @@ body {
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
     transition: all 0.3s ease;
     cursor: pointer;
+    min-width: 0;
 }
 
 .star-card:hover {
@@ -236,6 +359,7 @@ body {
     color: #333;
     font-size: 18px;
     margin-bottom: 5px;
+    overflow-wrap: anywhere;
 }
 
 .star-card-content p {
@@ -267,6 +391,7 @@ body {
     color: #333;
     font-size: 32px;
     margin-bottom: 15px;
+    overflow-wrap: anywhere;
 }
 
 .star-detail-text p {
@@ -304,6 +429,7 @@ body {
     transition: all 0.3s ease;
     display: flex;
     flex-direction: column;
+    min-width: 0;
 }
 
 .movie-card:hover {
@@ -545,9 +671,13 @@ body {
     color: #333;
     margin-bottom: 0;
     font-size: 16px;
-    min-height: 38px;
-    display: flex;
-    align-items: center;
+    line-height: 1.3;
+    min-height: 42px;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    overflow-wrap: anywhere;
 }
 
 .movie-info p {
@@ -557,6 +687,10 @@ body {
     min-height: 22px;
     display: flex;
     align-items: center;
+}
+
+.movie-info p strong {
+    margin-right: 4px;
 }
 
 .movie-info-placeholder {
@@ -702,6 +836,8 @@ body {
     height: 100%;
     background-color: rgba(0, 0, 0, 0.5);
     animation: fadeIn 0.3s ease;
+    padding: 20px;
+    overflow-y: auto;
 }
 
 @keyframes fadeIn {
@@ -721,6 +857,8 @@ body {
     border-radius: 10px;
     max-width: 500px;
     width: 90%;
+    max-height: calc(100vh - 40px);
+    overflow-y: auto;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
     position: relative;
     animation: slideIn 0.3s ease;
@@ -796,6 +934,21 @@ body {
     .header {
         flex-direction: column;
         gap: 15px;
+        align-items: stretch;
+    }
+
+    .header h1 {
+        order: -1;
+        font-size: 28px;
+    }
+
+    .header > .btn,
+    .header-buttons {
+        width: 100%;
+    }
+
+    .header > .btn {
+        justify-content: center;
     }
 
     .header-buttons {
@@ -809,6 +962,7 @@ body {
 
     .filters-section {
         flex-direction: column;
+        align-items: stretch;
     }
 
     .filter-group {
@@ -828,6 +982,13 @@ body {
         flex-direction: column;
         align-items: center;
         text-align: center;
+        padding: 20px;
+    }
+
+    .star-detail-image {
+        width: min(250px, 100%);
+        height: auto;
+        aspect-ratio: 5 / 6;
     }
 
     .stars-grid {
@@ -835,8 +996,64 @@ body {
         gap: 15px;
     }
 
+    .movies-section {
+        padding: 20px;
+    }
+
+    .movies-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
     .btn-reset {
         width: 100%;
+    }
+}
+
+@media (max-width: 480px) {
+    .container {
+        padding: 10px;
+    }
+
+    .header,
+    .filters-section,
+    .movies-section,
+    .star-detail-info {
+        border-radius: 8px;
+        padding: 16px;
+    }
+
+    .header h1 {
+        font-size: 24px;
+    }
+
+    .stars-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .star-card-image {
+        height: 320px;
+    }
+
+    .movie-buttons-row.fixed-row {
+        min-height: auto;
+    }
+
+    .btn-site,
+    .btn-watch,
+    .btn-preview,
+    .btn-edit,
+    .btn-delete-movie {
+        white-space: normal;
+    }
+
+    .modal {
+        padding: 10px;
+    }
+
+    .modal-content {
+        width: 100%;
+        padding: 22px 16px 18px;
+        max-height: calc(100vh - 20px);
     }
 }
 

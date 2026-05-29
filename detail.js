@@ -450,6 +450,7 @@ function renderMovies() {
     }
 
     movies.forEach((movie, index) => {
+        const movieIndex = currentStar.movies.indexOf(movie);
         const movieCard = document.createElement('div');
         movieCard.className = 'movie-card';
 
@@ -469,7 +470,7 @@ function renderMovies() {
         const previewButtonsHTML = createFixedButtonRow(
             'preview-button-row',
             previewUrls.length > 0
-                ? previewUrls.map(() => `<button class="btn-preview" data-open-url="${previewUrl || '#'}">Preview</button>`).join('')
+                ? previewUrls.map(url => `<button class="btn-preview" data-open-url="${url}">Preview</button>`).join('')
                 : '',
             'Preview'
         );
@@ -484,13 +485,13 @@ function renderMovies() {
 
         const actionButtonsHTML = `
             <div class="movie-buttons-row action-buttons-row fixed-row">
-                <button class="btn-edit" data-edit-index="${index}">Edit</button>
-                <button class="btn-delete-movie" data-delete-index="${index}">Delete</button>
+                <button class="btn-edit" data-edit-index="${movieIndex}">Edit</button>
+                <button class="btn-delete-movie" data-delete-index="${movieIndex}">Delete</button>
             </div>
         `;
 
         movieCard.innerHTML = `
-            ${createThumbnail(movie, index)}
+            ${createThumbnail(movie, movieIndex)}
             <div class="movie-info">
                 <h4>${movie.videoTitle}</h4>
                 ${images.length > 0 ? `<p><strong>Images:</strong> ${images.length} image${images.length !== 1 ? 's' : ''}</p>` : '<p class="movie-info-placeholder">&nbsp;</p>'}
@@ -510,23 +511,23 @@ function renderMovies() {
             const hasImages = images.length > 0;
             movieCard.addEventListener('mouseenter', () => {
                 if (hasImages) {
-                    stopSlideshow(index);
+                    stopSlideshow(movieIndex);
                     playPreviewVideo(previewVideo);
                 }
             });
             movieCard.addEventListener('mouseleave', () => {
                 if (hasImages) {
                     pausePreviewVideo(previewVideo);
-                    startSlideshow(index);
+                    startSlideshow(movieIndex);
                 }
             });
         }
 
-        movieCard.querySelector('[data-edit-index]')?.addEventListener('click', () => editMovie(index));
-        movieCard.querySelector('[data-delete-index]')?.addEventListener('click', () => deleteMovie(index));
+        movieCard.querySelector('[data-edit-index]')?.addEventListener('click', () => editMovie(movieIndex));
+        movieCard.querySelector('[data-delete-index]')?.addEventListener('click', () => deleteMovie(movieIndex));
 
         if (images.length > 1) {
-            setTimeout(() => startSlideshow(index), 100);
+            setTimeout(() => startSlideshow(movieIndex), 100);
         }
 
         moviesGrid.appendChild(movieCard);
@@ -684,7 +685,7 @@ async function handleAddMovie(e) {
     }
 
     saveData();
-    closeMovieModal();
+    closeMovieModalDialog();
     updateMovieCount();
     populateMovieFilters();
     applyMovieFilters();
