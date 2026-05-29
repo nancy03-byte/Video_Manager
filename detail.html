@@ -13,7 +13,6 @@
             <button class="btn btn-back" id="backBtn">← Back to Library</button>
             <h1 id="starTitle">Star Details</h1>
             <div class="header-buttons">
-                <button class="btn btn-add" id="addMovieBtn">+ Add Movie</button>
                 <button class="btn btn-edit" id="editStarBtn">Edit Star</button>
                 <button class="btn btn-delete-star" id="deleteStarBtn">Delete Star</button>
             </div>
@@ -57,7 +56,13 @@
 
         <!-- Movies Grid -->
         <div class="movies-section">
-            <h3>Movies</h3>
+            <div class="movies-section-header">
+                <h3>Movies</h3>
+                <div class="movies-section-actions">
+                    <button class="btn btn-add" id="addMovieBtn">+ Add Movie</button>
+                    <button class="btn btn-slideshow-toggle" id="toggleSlideshowsBtn" type="button">Stop Slides</button>
+                </div>
+            </div>
             <div class="movies-grid" id="moviesGrid">
                 <!-- Movies will be loaded here -->
             </div>

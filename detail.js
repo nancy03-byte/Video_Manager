@@ -20,6 +20,7 @@ const starImage = document.getElementById('starImage');
 const starNameElement = document.getElementById('starName');
 const starTitle = document.getElementById('starTitle');
 const movieCount = document.getElementById('movieCount');
+const toggleSlideshowsBtn = document.getElementById('toggleSlideshowsBtn');
 const moviesGrid = document.getElementById('moviesGrid');
 
 // Global data
@@ -27,6 +28,7 @@ let currentStar = null;
 let starsData = [];
 let filteredMovies = [];
 let slideShowIntervals = {};
+let areSlideshowsPaused = false;
 let editingMovieIndex = null;
 let movieSiteFilterDropdown = null;
 
@@ -58,6 +60,7 @@ function setupEventListeners() {
     movieSearchInput.addEventListener('input', applyMovieFilters);
     movieSortSelect.addEventListener('change', applyMovieFilters);
     resetMovieFiltersBtn.addEventListener('click', resetMovieFilters);
+    toggleSlideshowsBtn.addEventListener('click', toggleAllSlideshows);
     window.addEventListener('click', (e) => {
         if (e.target === addMovieModal) closeMovieModalDialog();
         if (e.target === editStarModal) closeEditStarModalDialog();
@@ -588,9 +591,11 @@ function createSitePreviewButtonRow(siteButtonHTML, previewButtonHTML) {
 }
 
 function renderMovies() {
+    stopAllSlideshows();
     moviesGrid.innerHTML = '';
 
     const movies = Array.isArray(filteredMovies) ? filteredMovies : [];
+    updateSlideshowsButton(movies);
 
     if (movies.length === 0) {
         moviesGrid.innerHTML = '<div class="empty-state" style="grid-column: 1/-1;"><p>No movies match the current filters.</p></div>';
@@ -658,7 +663,9 @@ function renderMovies() {
             movieCard.addEventListener('mouseleave', () => {
                 if (hasImages) {
                     pausePreviewVideo(previewVideo);
-                    startSlideshow(movieIndex);
+                    if (!areSlideshowsPaused) {
+                        startSlideshow(movieIndex);
+                    }
                 }
             });
         }
@@ -676,7 +683,7 @@ function renderMovies() {
 
 // Start auto-rotating slideshow
 function startSlideshow(movieIndex) {
-    if (slideShowIntervals[movieIndex]) {
+    if (areSlideshowsPaused || slideShowIntervals[movieIndex]) {
         return;
     }
 
@@ -702,6 +709,7 @@ function startSlideshow(movieIndex) {
         slides[nextIndex].classList.add('active');
         slides[nextIndex].style.opacity = '1';
     }, 3000);
+
 }
 
 function stopSlideshow(movieIndex) {
@@ -709,6 +717,42 @@ function stopSlideshow(movieIndex) {
         clearInterval(slideShowIntervals[movieIndex]);
         delete slideShowIntervals[movieIndex];
     }
+}
+
+function stopAllSlideshows() {
+    Object.keys(slideShowIntervals).forEach(movieIndex => stopSlideshow(movieIndex));
+}
+
+function startAllSlideshows() {
+    document.querySelectorAll('.movie-thumbnail.image-slideshow').forEach(thumbnail => {
+        const movieIndex = Number(thumbnail.dataset.movieIndex);
+        const slides = thumbnail.querySelectorAll('.slide');
+        if (!Number.isNaN(movieIndex) && slides.length > 1) {
+            startSlideshow(movieIndex);
+        }
+    });
+}
+
+function toggleAllSlideshows() {
+    areSlideshowsPaused = !areSlideshowsPaused;
+
+    if (areSlideshowsPaused) {
+        stopAllSlideshows();
+    } else {
+        startAllSlideshows();
+    }
+
+    updateSlideshowsButton();
+}
+
+function updateSlideshowsButton(movies = filteredMovies) {
+    const hasMultipleImageMovie = Array.isArray(movies)
+        && movies.some(movie => splitCommaSeparated(movie.images).length > 1);
+
+    toggleSlideshowsBtn.hidden = !hasMultipleImageMovie;
+    toggleSlideshowsBtn.disabled = !hasMultipleImageMovie;
+    toggleSlideshowsBtn.textContent = areSlideshowsPaused ? 'Start Slides' : 'Stop Slides';
+    toggleSlideshowsBtn.classList.toggle('is-paused', areSlideshowsPaused);
 }
 
 function playPreviewVideo(videoElement) {

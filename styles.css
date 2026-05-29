@@ -447,10 +447,43 @@ body {
     width: 100%;
 }
 
+.movies-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+.movies-section-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+}
+
 .movies-section h3 {
     color: #333;
-    margin-bottom: 20px;
+    margin-bottom: 0;
     font-size: 24px;
+}
+
+.btn-slideshow-toggle {
+    background: #4f46e5;
+    color: white;
+    min-width: 112px;
+}
+
+.btn-slideshow-toggle:hover {
+    background: #4338ca;
+}
+
+.btn-slideshow-toggle.is-paused {
+    background: #27ae60;
+}
+
+.btn-slideshow-toggle.is-paused:hover {
+    background: #229954;
 }
 
 .movies-grid {
@@ -1044,6 +1077,19 @@ body {
 
     .movies-section {
         padding: 20px;
+    }
+
+    .movies-section-header {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .movies-section-actions {
+        width: 100%;
+    }
+
+    .movies-section-actions .btn {
+        flex: 1 1 150px;
     }
 
     .movies-grid {
