@@ -1,98 +1,51 @@
+require('dotenv').config();
 const express = require('express');
-const fs = require('fs');
-const path = require('path');
+const mongoose = require('mongoose');
 const cors = require('cors');
+const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const DATA_FILE = path.join(__dirname, 'data.json');
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/star-library';
 const PLACEHOLDER_IMAGE = 'https://via.placeholder.com/300x400?text=Image+Not+Found';
 
+// Middleware
 app.use(cors());
 app.use(express.json());
 app.use(express.static(__dirname));
 
-function readDataFile() {
-    const data = fs.readFileSync(DATA_FILE, 'utf8');
-    return normalizeStoredData(JSON.parse(data));
-}
+// MongoDB Connection
+mongoose.connect(MONGODB_URI, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+}).then(() => {
+    console.log('Connected to MongoDB');
+}).catch((err) => {
+    console.error('MongoDB connection error:', err);
+});
 
-function writeDataFile(jsonData) {
-    const normalizedData = normalizeStoredData(jsonData);
-    fs.writeFileSync(DATA_FILE, JSON.stringify(normalizedData, null, 2));
-}
+// Define Schemas
+const movieSchema = new mongoose.Schema({
+    id: { type: Number, required: true },
+    videoTitle: { type: String, required: true },
+    siteName: { type: String, required: true },
+    videoUrl: { type: String, default: '' },
+    previewVideoUrl: { type: String, default: '' },
+    images: { type: String, default: '' },
+    starNames: [String]
+});
 
-function normalizeStoredData(jsonData) {
-    const sourceStars = Array.isArray(jsonData?.stars) ? jsonData.stars : [];
-    const normalizedStars = sourceStars.map((star) => ({
-        ...star,
-        name: normalizeStarName(star.name),
-        pictureUrl: normalizeStarName(star.pictureUrl),
-        movies: []
-    }));
+const starSchema = new mongoose.Schema({
+    id: { type: Number, required: true, unique: true },
+    name: { type: String, required: true },
+    pictureUrl: { type: String, default: PLACEHOLDER_IMAGE },
+    movies: [movieSchema]
+});
 
-    const starLookup = new Map(
-        normalizedStars.map((star) => [normalizeStarKey(star.name), star])
-    );
+const Star = mongoose.model('Star', starSchema);
 
-    const seenMovies = new Map();
 
-    sourceStars.forEach((star) => {
-        const ownerStar = starLookup.get(normalizeStarKey(star.name));
-        if (!ownerStar) {
-            return;
-        }
-
-        const sourceMovies = Array.isArray(star.movies) ? star.movies : [];
-        sourceMovies.forEach((movie) => {
-            const declaredStarNames = uniqueByNormalizedName([
-                star.name,
-                ...splitCommaSeparated(movie.starNames)
-            ]);
-
-            const targetStarNames = declaredStarNames.length > 1
-                ? declaredStarNames
-                : [star.name];
-
-            const sourceSignature = String(movie.id || `${movie.videoTitle || ''}|${movie.siteName || ''}|${movie.videoUrl || ''}|${movie.previewVideoUrl || ''}|${movie.images || ''}`);
-
-            targetStarNames.forEach((targetStarName, index) => {
-                const targetKey = normalizeStarKey(targetStarName);
-                const targetStar = starLookup.get(targetKey);
-                if (!targetStar) {
-                    return;
-                }
-
-                const dedupeKey = `${sourceSignature}::${targetKey}`;
-                if (seenMovies.has(dedupeKey)) {
-                    return;
-                }
-
-                seenMovies.set(dedupeKey, true);
-
-                const movieCopy = {
-                    ...movie,
-                    id: index === 0 && targetKey === normalizeStarKey(star.name) && movie.id
-                        ? movie.id
-                        : createMovieId(),
-                    starNames: [targetStar.name]
-                };
-
-                targetStar.movies.push(movieCopy);
-            });
-        });
-    });
-
-    return {
-        ...jsonData,
-        stars: normalizedStars
-    };
-}
-
-function createMovieId() {
-    return Date.now() + Math.floor(Math.random() * 1000000);
-}
-
+// Helper Functions
 function normalizeStarName(name) {
     return String(name || '').trim();
 }
@@ -105,7 +58,6 @@ function splitCommaSeparated(value) {
     if (Array.isArray(value)) {
         return value.map(normalizeStarName).filter(Boolean);
     }
-
     return String(value || '')
         .split(',')
         .map(normalizeStarName)
@@ -124,119 +76,78 @@ function uniqueByNormalizedName(names) {
     });
 }
 
-function createStarProfile(name) {
-    return {
-        id: Date.now() + Math.floor(Math.random() * 1000000),
-        name: normalizeStarName(name),
-        pictureUrl: PLACEHOLDER_IMAGE,
-        movies: []
-    };
+function createMovieId() {
+    return Date.now() + Math.floor(Math.random() * 1000000);
 }
 
-function findStarById(jsonData, starId) {
-    return jsonData.stars.find((star) => String(star.id) === String(starId));
-}
-
-function findStarByName(jsonData, name) {
+async function findStarByName(name) {
     const targetKey = normalizeStarKey(name);
     if (!targetKey) {
         return null;
     }
-
-    return jsonData.stars.find((star) => normalizeStarKey(star.name) === targetKey) || null;
+    
+    const allStars = await Star.find();
+    return allStars.find((star) => normalizeStarKey(star.name) === targetKey) || null;
 }
 
-function ensureStarByName(jsonData, name) {
+async function ensureStarByName(name) {
     const normalizedName = normalizeStarName(name);
     if (!normalizedName) {
         return null;
     }
 
-    const existingStar = findStarByName(jsonData, normalizedName);
+    const existingStar = await findStarByName(normalizedName);
     if (existingStar) {
         return existingStar;
     }
 
-    const newStar = createStarProfile(normalizedName);
-    jsonData.stars.push(newStar);
-    return newStar;
-}
-
-function buildMoviePayload(body, movieId, starNames) {
-    return {
-        id: movieId,
-        videoTitle: body.videoTitle,
-        siteName: body.siteName,
-        videoUrl: body.videoUrl || '',
-        previewVideoUrl: body.previewVideoUrl || '',
-        images: body.images || '',
-        starNames
-    };
-}
-
-function createMovieCopy(moviePayload, movieId, starName) {
-    return {
-        ...moviePayload,
-        id: movieId,
-        starNames: [starName]
-    };
-}
-
-function saveMovieToStars(jsonData, moviePayload, starNames) {
-    const targets = uniqueByNormalizedName(starNames)
-        .map((name) => ensureStarByName(jsonData, name))
-        .filter(Boolean);
-
-    const movieCopies = targets.map((star, index) => {
-        const movieId = index === 0 ? moviePayload.id : Date.now() + Math.floor(Math.random() * 1000000) + index;
-        const movieCopy = createMovieCopy(moviePayload, movieId, star.name);
-        star.movies.push(movieCopy);
-        return movieCopy;
+    const newStar = new Star({
+        id: Date.now() + Math.floor(Math.random() * 1000000),
+        name: normalizedName,
+        pictureUrl: PLACEHOLDER_IMAGE,
+        movies: []
     });
-
-    return movieCopies;
+    
+    return await newStar.save();
 }
 
-app.get('/api/stars', (req, res) => {
+
+// API Endpoints
+app.get('/api/stars', async (req, res) => {
     try {
-        const jsonData = readDataFile();
-        res.json(jsonData.stars);
+        const stars = await Star.find();
+        res.json(stars);
     } catch (error) {
-        console.error('Error reading data.json:', error);
-        res.status(500).json({ error: 'Failed to read data' });
+        console.error('Error reading stars:', error);
+        res.status(500).json({ error: 'Failed to read stars' });
     }
 });
 
-app.post('/api/stars', (req, res) => {
+app.post('/api/stars', async (req, res) => {
     try {
-        const jsonData = readDataFile();
-
         const name = normalizeStarName(req.body.name);
         if (!name) {
             return res.status(400).json({ error: 'Star name is required' });
         }
 
-        const newStar = {
-            id: Date.now(),
+        const newStar = new Star({
+            id: Date.now() + Math.floor(Math.random() * 1000000),
             name,
-            pictureUrl: normalizeStarName(req.body.pictureUrl),
+            pictureUrl: normalizeStarName(req.body.pictureUrl) || PLACEHOLDER_IMAGE,
             movies: []
-        };
+        });
 
-        jsonData.stars.push(newStar);
-        writeDataFile(jsonData);
-
-        res.status(201).json(newStar);
+        const savedStar = await newStar.save();
+        res.status(201).json(savedStar);
     } catch (error) {
         console.error('Error adding star:', error);
         res.status(500).json({ error: 'Failed to add star' });
     }
 });
 
-app.put('/api/stars/:starId', (req, res) => {
+app.put('/api/stars/:starId', async (req, res) => {
     try {
-        const jsonData = readDataFile();
-        const star = findStarById(jsonData, req.params.starId);
+        const star = await Star.findById(req.params.starId);
 
         if (!star) {
             return res.status(404).json({ error: 'Star not found' });
@@ -255,21 +166,20 @@ app.put('/api/stars/:starId', (req, res) => {
 
         star.name = name;
         star.pictureUrl = pictureUrl;
-        writeDataFile(jsonData);
+        const updatedStar = await star.save();
 
-        res.json(star);
+        res.json(updatedStar);
     } catch (error) {
         console.error('Error updating star:', error);
         res.status(500).json({ error: 'Failed to update star' });
     }
 });
 
-app.post('/api/stars/:starId/movies', (req, res) => {
+app.post('/api/stars/:starId/movies', async (req, res) => {
     try {
-        const jsonData = readDataFile();
-        const currentStar = findStarById(jsonData, req.params.starId);
+        const star = await Star.findById(req.params.starId);
 
-        if (!currentStar) {
+        if (!star) {
             return res.status(404).json({ error: 'Star not found' });
         }
 
@@ -281,19 +191,41 @@ app.post('/api/stars/:starId/movies', (req, res) => {
         }
 
         const starNames = uniqueByNormalizedName([
-            currentStar.name,
+            star.name,
             ...splitCommaSeparated(req.body.starNames || req.body.movieStars || req.body.stars)
         ]);
 
-        const moviePayload = buildMoviePayload(
-            req.body,
-            req.body.id || Date.now() + Math.floor(Math.random() * 1000000),
-            [currentStar.name]
-        );
-        const movieCopies = saveMovieToStars(jsonData, moviePayload, starNames);
-        const primaryMovie = movieCopies[0] || moviePayload;
+        const movieId = req.body.id || createMovieId();
+        const moviePayload = {
+            id: movieId,
+            videoTitle,
+            siteName,
+            videoUrl: req.body.videoUrl || '',
+            previewVideoUrl: req.body.previewVideoUrl || '',
+            images: req.body.images || '',
+            starNames: [star.name]
+        };
 
-        writeDataFile(jsonData);
+        // Save to primary star
+        star.movies.push(moviePayload);
+
+        // Save to other stars mentioned
+        const otherStarNames = starNames.filter(name => normalizeStarKey(name) !== normalizeStarKey(star.name));
+        for (const starName of otherStarNames) {
+            const otherStar = await ensureStarByName(starName);
+            if (otherStar) {
+                const movieCopy = {
+                    ...moviePayload,
+                    id: createMovieId(),
+                    starNames: [otherStar.name]
+                };
+                otherStar.movies.push(movieCopy);
+                await otherStar.save();
+            }
+        }
+
+        const updatedStar = await star.save();
+        const primaryMovie = updatedStar.movies[updatedStar.movies.length - 1];
 
         res.status(201).json({
             movie: primaryMovie,
@@ -305,10 +237,9 @@ app.post('/api/stars/:starId/movies', (req, res) => {
     }
 });
 
-app.put('/api/stars/:starId/movies/:movieIndex', (req, res) => {
+app.put('/api/stars/:starId/movies/:movieIndex', async (req, res) => {
     try {
-        const jsonData = readDataFile();
-        const star = findStarById(jsonData, req.params.starId);
+        const star = await Star.findById(req.params.starId);
 
         if (!star) {
             return res.status(404).json({ error: 'Star not found' });
@@ -319,7 +250,6 @@ app.put('/api/stars/:starId/movies/:movieIndex', (req, res) => {
             return res.status(404).json({ error: 'Movie not found' });
         }
 
-        const existingMovie = star.movies[movieIndex];
         const videoTitle = normalizeStarName(req.body.videoTitle);
         const siteName = normalizeStarName(req.body.siteName);
 
@@ -327,37 +257,32 @@ app.put('/api/stars/:starId/movies/:movieIndex', (req, res) => {
             return res.status(400).json({ error: 'Video title and site name are required' });
         }
 
-        const movieId = existingMovie.id || req.body.id || Date.now() + Math.floor(Math.random() * 1000000);
-        const updatedMovie = buildMoviePayload(req.body, movieId, [star.name]);
+        const movieId = star.movies[movieIndex].id || req.body.id || createMovieId();
+        const updatedMovie = {
+            id: movieId,
+            videoTitle,
+            siteName,
+            videoUrl: req.body.videoUrl || '',
+            previewVideoUrl: req.body.previewVideoUrl || '',
+            images: req.body.images || '',
+            starNames: [star.name]
+        };
 
         star.movies[movieIndex] = updatedMovie;
-        writeDataFile(jsonData);
+        const savedStar = await star.save();
 
-        res.json(updatedMovie);
+        res.json(savedStar.movies[movieIndex]);
     } catch (error) {
         console.error('Error updating movie:', error);
         res.status(500).json({ error: 'Failed to update movie' });
     }
 });
 
-function removeStarById(starId) {
-    const jsonData = readDataFile();
-    const starIndex = jsonData.stars.findIndex((star) => String(star.id) === String(starId));
-
-    if (starIndex === -1) {
-        return null;
-    }
-
-    const removedStar = jsonData.stars.splice(starIndex, 1)[0];
-    writeDataFile(jsonData);
-    return removedStar;
-}
-
-app.delete('/api/stars/:starId', (req, res) => {
+app.delete('/api/stars/:starId', async (req, res) => {
     try {
-        const removedStar = removeStarById(req.params.starId);
+        const star = await Star.findByIdAndDelete(req.params.starId);
 
-        if (!removedStar) {
+        if (!star) {
             return res.status(404).json({ error: 'Star not found' });
         }
 
@@ -368,10 +293,9 @@ app.delete('/api/stars/:starId', (req, res) => {
     }
 });
 
-app.delete('/api/stars/:starId/movies/:movieIndex', (req, res) => {
+app.delete('/api/stars/:starId/movies/:movieIndex', async (req, res) => {
     try {
-        const jsonData = readDataFile();
-        const star = findStarById(jsonData, req.params.starId);
+        const star = await Star.findById(req.params.starId);
 
         if (!star) {
             return res.status(404).json({ error: 'Star not found' });
@@ -383,8 +307,7 @@ app.delete('/api/stars/:starId/movies/:movieIndex', (req, res) => {
         }
 
         star.movies.splice(movieIndex, 1);
-
-        writeDataFile(jsonData);
+        await star.save();
 
         res.json({ success: true });
     } catch (error) {
