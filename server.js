@@ -111,6 +111,24 @@ async function ensureStarByName(name) {
     return await newStar.save();
 }
 
+function isObjectIdString(value) {
+    return typeof value === 'string' && /^[0-9a-fA-F]{24}$/.test(value);
+}
+
+async function getStarByParam(param) {
+    // Accept either MongoDB _id (ObjectId) or numeric `id` used by the client
+    if (isObjectIdString(param)) {
+        return await Star.findById(param);
+    }
+
+    const asNumber = Number(param);
+    if (!Number.isNaN(asNumber)) {
+        return await Star.findOne({ id: asNumber });
+    }
+
+    return await Star.findOne({ id: param });
+}
+
 
 // API Endpoints
 app.get('/api/stars', async (req, res) => {
@@ -147,7 +165,7 @@ app.post('/api/stars', async (req, res) => {
 
 app.put('/api/stars/:starId', async (req, res) => {
     try {
-        const star = await Star.findById(req.params.starId);
+        const star = await getStarByParam(req.params.starId);
 
         if (!star) {
             return res.status(404).json({ error: 'Star not found' });
@@ -177,7 +195,7 @@ app.put('/api/stars/:starId', async (req, res) => {
 
 app.post('/api/stars/:starId/movies', async (req, res) => {
     try {
-        const star = await Star.findById(req.params.starId);
+        const star = await getStarByParam(req.params.starId);
 
         if (!star) {
             return res.status(404).json({ error: 'Star not found' });
@@ -239,7 +257,7 @@ app.post('/api/stars/:starId/movies', async (req, res) => {
 
 app.put('/api/stars/:starId/movies/:movieIndex', async (req, res) => {
     try {
-        const star = await Star.findById(req.params.starId);
+        const star = await getStarByParam(req.params.starId);
 
         if (!star) {
             return res.status(404).json({ error: 'Star not found' });
@@ -280,7 +298,14 @@ app.put('/api/stars/:starId/movies/:movieIndex', async (req, res) => {
 
 app.delete('/api/stars/:starId', async (req, res) => {
     try {
-        const star = await Star.findByIdAndDelete(req.params.starId);
+        const param = req.params.starId;
+        let star;
+        if (isObjectIdString(param)) {
+            star = await Star.findByIdAndDelete(param);
+        } else {
+            const asNumber = Number(param);
+            star = await Star.findOneAndDelete({ id: asNumber });
+        }
 
         if (!star) {
             return res.status(404).json({ error: 'Star not found' });
@@ -295,7 +320,7 @@ app.delete('/api/stars/:starId', async (req, res) => {
 
 app.delete('/api/stars/:starId/movies/:movieIndex', async (req, res) => {
     try {
-        const star = await Star.findById(req.params.starId);
+        const star = await getStarByParam(req.params.starId);
 
         if (!star) {
             return res.status(404).json({ error: 'Star not found' });

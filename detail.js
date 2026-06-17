@@ -354,7 +354,7 @@ function loadStarDetails(starId) {
     starNameElement.textContent = currentStar.name;
     starImage.src = currentStar.pictureUrl;
     starImage.onerror = () => {
-        starImage.src = 'https://via.placeholder.com/250x300?text=Image+Not+Found';
+        starImage.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='250' height='300'%3E%3Crect fill='%23ddd' width='100%25' height='100%25'/%3E%3Ctext x='50%25' y='50%25' text-anchor='middle' dy='.1em' fill='%23666' font-family='sans-serif' font-size='18'%3EImage Not Found%3C/text%3E%3C/svg%3E";
     };
 
     updateMovieCount();
@@ -408,7 +408,7 @@ function createLocalStarIfNeeded(name) {
     star = {
         id: Date.now() + Math.floor(Math.random() * 1000000),
         name: normalizedName,
-        pictureUrl: 'https://via.placeholder.com/300x400?text=Image+Not+Found',
+        pictureUrl: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='400'%3E%3Crect fill='%23ddd' width='100%25' height='100%25'/%3E%3Ctext x='50%25' y='50%25' text-anchor='middle' dy='.1em' fill='%23666' font-family='sans-serif' font-size='18'%3EImage Not Found%3C/text%3E%3C/svg%3E",
         movies: []
     };
 
@@ -622,7 +622,7 @@ function createThumbnail(movie, index) {
     if (hasImages) {
         const slidesHTML = images.map((img, imgIndex) => `
             <div class="slide ${imgIndex === 0 ? 'active' : ''}" style="opacity: ${imgIndex === 0 ? '1' : '0'};">
-                <img src="${img}" alt="Movie image ${imgIndex + 1}" onerror="this.src='https://via.placeholder.com/300x180?text=Image+Not+Found'">
+                <img src="${img}" alt="Movie image ${imgIndex + 1}" onerror='this.src="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%27300%27 height=%27180%27%3E%3Crect fill=%27%23ddd%27 width=%27100%25%27 height=%27100%25%27/%3E%3Ctext x=%2750%25%27 y=%2750%25%27 text-anchor=%27middle%27 dy=%27.1em%27 fill=%27%23666%27 font-family=%27sans-serif%27 font-size=%2716%27%3EImage Not Found%3C/text%3E%3C/svg%3E"'>
             </div>
         `).join('');
 

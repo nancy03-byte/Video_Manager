@@ -372,7 +372,7 @@ function renderStars() {
         const starCard = document.createElement("div");
         starCard.className = "star-card";
         starCard.innerHTML = `
-            <img src="${star.pictureUrl}" alt="${star.name}" class="star-card-image" onerror="this.src='https://via.placeholder.com/300x400?text=Image+Not+Found'">
+            <img src="${star.pictureUrl}" alt="${star.name}" class="star-card-image" onerror='this.src="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%27300%27 height=%27400%27%3E%3Crect fill=%27%23ddd%27 width=%27100%25%27 height=%27100%25%27/%3E%3Ctext x=%2750%25%27 y=%2750%25%27 text-anchor=%27middle%27 dy=%27.1em%27 fill=%27%23666%27 font-family=%27sans-serif%27 font-size=%2718%27%3EImage Not Found%3C/text%3E%3C/svg%3E"'>
             <div class="star-card-content">
                 <h3>${star.name}</h3>
                 <p>${star.movies.length} movies</p>
