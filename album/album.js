@@ -243,7 +243,13 @@ function renderGrid() {
             }
         };
 
-        img.onclick = () => openLightbox(index);
+        // Click on item itself opens lightbox
+        item.onclick = (e) => {
+            // Only open lightbox if not clicking a button in the overlay
+            if (!e.target.closest('.album-fav-btn') && !e.target.closest('.album-del-btn') && !e.target.closest('.album-upload-btn')) {
+                openLightbox(index);
+            }
+        };
 
         // Overlay with actions
         const overlay = document.createElement('div');

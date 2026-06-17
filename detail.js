@@ -632,6 +632,14 @@ function resolveThumbnail(movie) {
     const cached = THUMBNAIL_CACHE.get(cacheKey);
     if (cached) return cached;
 
+    // If movie has favorite album images, use those first for the thumbnail slideshow
+    const favImages = splitCommaSeparated(movie.favoriteImages);
+    if (favImages.length > 0) {
+        const result = { type: 'images', urls: favImages };
+        THUMBNAIL_CACHE.set(cacheKey, result);
+        return result;
+    }
+
     const rawImages = splitCommaSeparated(movie.images);
     if (rawImages.length > 0) {
         const result = { type: 'images', urls: rawImages };
