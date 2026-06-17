@@ -1476,7 +1476,78 @@ body {
     }
 }
 
-/* Empty State */
+/* ── Format Images Modal ──────────────────────────────────────────────────── */
+.format-instructions {
+    font-size: 14px;
+    color: #6b7280;
+    margin-bottom: 16px;
+    line-height: 1.5;
+}
+
+.format-preview {
+    background: #f3f4f6;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    padding: 12px;
+    margin-top: 12px;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.format-preview p {
+    font-size: 14px;
+    color: #374151;
+    margin-bottom: 8px;
+}
+
+.format-preview pre {
+    font-size: 12px;
+    color: #1f2937;
+    white-space: pre-wrap;
+    word-break: break-all;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 4px;
+    padding: 8px;
+    margin: 0;
+    max-height: 130px;
+    overflow-y: auto;
+    line-height: 1.4;
+}
+
+.format-actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 20px;
+    align-items: stretch;
+}
+
+.format-actions .btn-preview {
+    flex: 1;
+    padding: 12px;
+    font-size: 14px;
+    min-height: 44px;
+    background: #4f46e5;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-weight: 500;
+    transition: background 0.3s ease;
+}
+
+.format-actions .btn-preview:hover {
+    background: #4338ca;
+}
+
+.format-actions .btn-submit {
+    flex: 2;
+    padding: 12px;
+    font-size: 14px;
+    min-height: 44px;
+}
+
+/* ── Empty State ──────────────────────────────────────────────────────────── */
 .empty-state {
     text-align: center;
     padding: 60px 20px;

@@ -32,6 +32,7 @@ const API_URL = '/api';
 // DOM Elements
 const backBtn = document.getElementById('backBtn');
 const addMovieBtn = document.getElementById('addMovieBtn');
+const addMovieAndFormatBtn = document.getElementById('addMovieAndFormatBtn');
 const editStarBtn = document.getElementById('editStarBtn');
 const deleteStarBtn = document.getElementById('deleteStarBtn');
 const addMovieModal = document.getElementById('addMovieModal');
@@ -60,6 +61,20 @@ let slideShowIntervals = {};
 let areSlideshowsPaused = false;
 let editingMovieIndex = null;
 let movieSiteFilterDropdown = null;
+let isFormatFlow = false;
+let pendingMovieId = null;
+
+// ── Format Images Modal DOM refs ──────────────────────────────────────────
+const formatImagesModal = document.getElementById('formatImagesModal');
+const closeFormatModal = document.getElementById('closeFormatModal');
+const formatImagesForm = document.getElementById('formatImagesForm');
+const formatSourceHtml = document.getElementById('formatSourceHtml');
+const formatBaseUrl = document.getElementById('formatBaseUrl');
+const formatPreview = document.getElementById('formatPreview');
+const formatCount = document.getElementById('formatCount');
+const formatResult = document.getElementById('formatResult');
+const formatPreviewBtn = document.getElementById('formatPreviewBtn');
+const formatSaveBtn = document.getElementById('formatSaveBtn');
 
 // Initialize
 document.addEventListener('DOMContentLoaded', async () => {
@@ -77,12 +92,16 @@ document.addEventListener('DOMContentLoaded', async () => {
 function setupEventListeners() {
     backBtn.addEventListener('click', goBack);
     addMovieBtn.addEventListener('click', openAddMovieModal);
+    addMovieAndFormatBtn.addEventListener('click', openAddMovieAndFormat);
     editStarBtn.addEventListener('click', openEditStarModal);
     deleteStarBtn.addEventListener('click', deleteStar);
     closeMovieModal.addEventListener('click', () => closeMovieModalDialog());
     closeEditStarModal.addEventListener('click', () => closeEditStarModalDialog());
+    closeFormatModal.addEventListener('click', closeFormatModalDialog);
     addMovieForm.addEventListener('submit', handleAddMovie);
     editStarForm.addEventListener('submit', handleEditStar);
+    formatImagesForm.addEventListener('submit', handleFormatSave);
+    formatPreviewBtn.addEventListener('click', handleFormatPreview);
     document.getElementById('movieImages').addEventListener('blur', (event) => addTrailingComma(event.target));
     document.getElementById('videoUrl').addEventListener('blur', (event) => addTrailingComma(event.target));
     document.getElementById('movieImages').addEventListener('keydown', handleCommaFieldEnter);
@@ -95,6 +114,7 @@ function setupEventListeners() {
     window.addEventListener('click', (e) => {
         if (e.target === addMovieModal) closeMovieModalDialog();
         if (e.target === editStarModal) closeEditStarModalDialog();
+        if (e.target === formatImagesModal) closeFormatModalDialog();
     });
 }
 
@@ -641,9 +661,6 @@ function resetMovieFilters() {
 }
 
 // ── Thumbnail resolution ───────────────────────────────────────────────────
-// Synchronous — no preloading. Images render immediately with lazy loading.
-// Broken images fall back to star profile → preview video → placeholder via onerror.
-
 const PLACEHOLDER_SVG = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='180'%3E%3Crect fill='%23ddd' width='100%25' height='100%25'/%3E%3Ctext x='50%25' y='50%25' text-anchor='middle' dy='.1em' fill='%23666' font-family='sans-serif' font-size='16'%3ENo Preview%3C/text%3E%3C/svg%3E";
 
 const THUMBNAIL_CACHE = new Map();
@@ -653,7 +670,6 @@ function resolveThumbnail(movie) {
     const cached = THUMBNAIL_CACHE.get(cacheKey);
     if (cached) return cached;
 
-    // 1. Try images
     const rawImages = splitCommaSeparated(movie.images);
     if (rawImages.length > 0) {
         const result = { type: 'images', urls: rawImages };
@@ -661,7 +677,6 @@ function resolveThumbnail(movie) {
         return result;
     }
 
-    // 2. Preview video
     const previewUrl = getSingleUrl(movie.previewVideoUrl);
     if (previewUrl) {
         const result = { type: 'preview', url: previewUrl };
@@ -669,14 +684,12 @@ function resolveThumbnail(movie) {
         return result;
     }
 
-    // 3. Profile picture
     if (currentStar?.pictureUrl) {
         const result = { type: 'profile', url: currentStar.pictureUrl };
         THUMBNAIL_CACHE.set(cacheKey, result);
         return result;
     }
 
-    // 4. Fallback placeholder
     const result = { type: 'placeholder' };
     THUMBNAIL_CACHE.set(cacheKey, result);
     return result;
@@ -717,7 +730,6 @@ function createThumbnailHTML(movieIndex, resolved, previewUrl) {
         `;
     }
 
-    // profile or placeholder
     const imgSrc = resolved.type === 'profile' ? resolved.url : PLACEHOLDER_SVG;
     return `
         <div class="movie-thumbnail generic-video" data-movie-index="${movieIndex}" data-has-images="false" data-has-preview="false">
@@ -755,8 +767,7 @@ async function renderMovies() {
         return;
     }
 
-    // Build movie cards as document fragments for batch insertion
-    const cardPromises = movies.map(async (movie, index) => {
+    const cardPromises = movies.map(async (movie) => {
         const movieIndex = currentStar.movies.indexOf(movie);
         const movieCard = document.createElement('div');
         movieCard.className = 'movie-card';
@@ -766,8 +777,6 @@ async function renderMovies() {
         const siteLink = getLinkValue(movie.siteName || '');
         const siteDomain = extractDomainName(movie.siteName || movie.siteNameLink || movie.siteUrl || '');
         const rawPreviewUrl = getSingleUrl(movie.previewVideoUrl);
-
-        // Resolve thumbnail with fallback chain
         const resolved = await resolveThumbnail(movie);
 
         const sitePreviewButtonsHTML = createSitePreviewButtonRow(
@@ -791,8 +800,6 @@ async function renderMovies() {
             </div>
         `;
 
-        // Pass rawPreviewUrl to createThumbnailHTML so it can embed the preview video
-        // inside the slideshow container when images are present
         movieCard.innerHTML = `
             ${createThumbnailHTML(movieIndex, resolved, rawPreviewUrl)}
             <div class="movie-info">
@@ -815,7 +822,6 @@ async function renderMovies() {
             playPreviewVideo(previewVideo);
         }
 
-        // When both images and preview exist, manage slideshow on hover
         if (previewVideo && hasImages && rawPreviewUrl) {
             movieCard.addEventListener('mouseenter', () => {
                 stopSlideshow(movieIndex);
@@ -844,7 +850,6 @@ async function renderMovies() {
     cards.forEach(card => moviesGrid.appendChild(card));
 }
 
-// Start auto-rotating slideshow
 function startSlideshow(movieIndex) {
     if (areSlideshowsPaused || slideShowIntervals[movieIndex]) {
         return;
@@ -909,7 +914,6 @@ function toggleAllSlideshows() {
 }
 
 function updateSlideshowsButton(movies = filteredMovies) {
-    // We check original images length (pre-validation) for display
     const hasMultipleImageMovie = Array.isArray(movies)
         && movies.some(movie => splitCommaSeparated(movie.images).length > 1);
 
@@ -951,12 +955,10 @@ function openAlbum(movieIndex) {
     window.open(`album/album.html?starId=${currentStar.id}&movieIndex=${movieIndex}`, '_blank');
 }
 
-// Open URL in new tab
 function openInNewTab(url) {
     window.open(url, '_blank');
 }
 
-// Extract YouTube video ID
 function extractYouTubeId(url) {
     const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
     const match = url.match(regExp);
@@ -998,7 +1000,6 @@ function closeMovieModalDialog() {
     addMovieModal.classList.remove('show');
     addMovieForm.reset();
     editingMovieIndex = null;
-    // Clear the stars field explicitly
     document.getElementById('movieStars').value = '';
     addMovieModal.querySelector('.modal-content h2').textContent = 'Add New Movie';
 }
@@ -1008,7 +1009,7 @@ function closeEditStarModalDialog() {
     editStarForm.reset();
 }
 
-// Handle add movie
+// Handle add movie — supports both normal and "format flow"
 async function handleAddMovie(e) {
     e.preventDefault();
 
@@ -1079,12 +1080,48 @@ async function handleAddMovie(e) {
         saveData();
     }
 
-    closeMovieModalDialog();
+    // Reload fresh data
     await loadData();
-    loadStarDetails(currentStar.id);
-    updateMovieCount();
-    populateMovieFilters();
-    applyMovieFilters();
+    currentStar = starsData.find(s => s.id === currentStar?.id);
+    if (!currentStar) {
+        closeMovieModalDialog();
+        window.location.href = 'index.html';
+        return;
+    }
+
+    // If format flow: keep modal closed, set pendingMovieId, open format modal
+    if (isFormatFlow) {
+        const newMovie = currentStar.movies.find(m => String(m.id) === String(moviePayload.id));
+        if (newMovie) {
+            pendingMovieId = moviePayload.id;
+        } else if (currentStar.movies.length > 0) {
+            pendingMovieId = currentStar.movies[currentStar.movies.length - 1].id;
+        }
+
+        if (pendingMovieId) {
+            closeMovieModalDialog();
+            formatSourceHtml.value = '';
+            formatBaseUrl.value = '';
+            formatPreview.hidden = true;
+            formatResult.textContent = '';
+            formatImagesModal.classList.add('show');
+        } else {
+            alert('Movie was created but could not locate it for image formatting.');
+            isFormatFlow = false;
+            closeMovieModalDialog();
+            loadStarDetails(currentStar.id);
+        }
+    } else {
+        // Normal flow: close modal and refresh
+        closeMovieModalDialog();
+        loadStarDetails(currentStar.id);
+        updateMovieCount();
+        populateMovieFilters();
+        applyMovieFilters();
+    }
+
+    // Reset button text
+    addMovieForm.querySelector('.btn-submit').textContent = 'Add Movie';
 }
 
 // Handle edit star
@@ -1201,4 +1238,127 @@ async function deleteStar() {
 // Go back to home
 function goBack() {
     window.location.href = 'index.html';
+}
+
+// ── Format Image Functions ─────────────────────────────────────────────────
+
+// Open add movie modal in "format flow" mode — after submit, redirects to format modal
+function openAddMovieAndFormat() {
+    isFormatFlow = true;
+    openAddMovieModal();
+    addMovieForm.querySelector('.btn-submit').textContent = 'Add Movie & Format Images';
+}
+
+function closeFormatModalDialog() {
+    formatImagesModal.classList.remove('show');
+    formatImagesForm.reset();
+    formatPreview.hidden = true;
+    formatResult.textContent = '';
+    isFormatFlow = false;
+    pendingMovieId = null;
+}
+
+// Parse HTML from imx.to and extract image IDs from href attributes
+function parseFormatImages(sourceHtml, baseUrl) {
+    if (!sourceHtml || !baseUrl) return [];
+
+    const ids = [];
+    // Match href="https://imx.to/i/XXXXX" patterns
+    const regex = /href="https:\/\/imx\.to\/i\/([a-zA-Z0-9]+)"/g;
+    let match;
+
+    while ((match = regex.exec(sourceHtml)) !== null) {
+        const id = match[1];
+        // Build URL: baseUrl + id + .jpg
+        const baseNormalized = baseUrl.endsWith('/') ? baseUrl : baseUrl + '/';
+        ids.push(`${baseNormalized}${id}.jpg`);
+    }
+
+    return ids;
+}
+
+// Handle preview button click
+function handleFormatPreview() {
+    const sourceHtml = formatSourceHtml.value;
+    const baseUrl = formatBaseUrl.value.trim();
+
+    if (!sourceHtml) {
+        alert('Please paste the source HTML.');
+        return;
+    }
+
+    if (!baseUrl) {
+        alert('Please enter the base URL.');
+        return;
+    }
+
+    const urls = parseFormatImages(sourceHtml, baseUrl);
+
+    if (urls.length === 0) {
+        alert('No image IDs found in the HTML. Make sure it contains href="https://imx.to/i/XXXXX" patterns.');
+        formatPreview.hidden = true;
+        return;
+    }
+
+    formatCount.textContent = urls.length;
+    formatResult.textContent = urls.join(',\n');
+    formatPreview.hidden = false;
+}
+
+// Handle save button click — updates the pending movie's images field
+async function handleFormatSave(e) {
+    e.preventDefault();
+
+    if (!pendingMovieId) {
+        alert('No pending movie to save images to. Please add the movie first.');
+        return;
+    }
+
+    const sourceHtml = formatSourceHtml.value;
+    const baseUrl = formatBaseUrl.value.trim();
+
+    if (!sourceHtml || !baseUrl) {
+        alert('Please fill in both the source HTML and base URL fields.');
+        return;
+    }
+
+    const urls = parseFormatImages(sourceHtml, baseUrl);
+
+    if (urls.length === 0) {
+        alert('No image IDs found. Nothing to save.');
+        return;
+    }
+
+    const imagesString = urls.join(',');
+
+    // Find the movie in currentStar.movies
+    const movieIndex = currentStar.movies.findIndex(m => String(m.id) === String(pendingMovieId));
+    if (movieIndex === -1) {
+        alert('Could not find the pending movie. It may have been deleted.');
+        closeFormatModalDialog();
+        return;
+    }
+
+    // Update the movie's images field
+    currentStar.movies[movieIndex].images = imagesString;
+    saveData();
+
+    // Also try to update on the server
+    try {
+        await fetch(`${API_URL}/stars/${currentStar.id}/movies/${movieIndex}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(currentStar.movies[movieIndex])
+        });
+    } catch (_) {
+        // Server offline is fine — localStorage is already updated
+    }
+
+    closeFormatModalDialog();
+
+    // Reload data and refresh view
+    await loadData();
+    loadStarDetails(currentStar.id);
+
+    alert(`Formatted ${urls.length} images and saved to "${currentStar.movies[movieIndex]?.videoTitle || 'movie'}".`);
 }

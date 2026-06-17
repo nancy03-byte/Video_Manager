@@ -70,6 +70,7 @@
                         </select>
                     </label>
                     <button class="btn btn-add" id="addMovieBtn">+ Add Movie</button>
+                    <button class="btn btn-add" id="addMovieAndFormatBtn">+ Add Movie & Format Images</button>
                     <button class="btn btn-slideshow-toggle" id="toggleSlideshowsBtn" type="button">Stop Slides</button>
                 </div>
             </div>
@@ -129,6 +130,33 @@
                     <input type="url" id="editStarPictureUrl" required>
                 </div>
                 <button type="submit" class="btn btn-submit">Save Changes</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Image Format Modal (Step 2) -->
+    <div class="modal" id="formatImagesModal">
+        <div class="modal-content">
+            <span class="close" id="closeFormatModal">&times;</span>
+            <h2>Format Movie Images</h2>
+            <p class="format-instructions">Paste the HTML containing image links, then specify the replacement base URL.</p>
+            <form id="formatImagesForm">
+                <div class="form-group">
+                    <label for="formatSourceHtml">Source HTML:</label>
+                    <textarea id="formatSourceHtml" rows="6" placeholder='Paste HTML here, e.g.: <a href="https://imx.to/i/67m16f">...</a>'></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="formatBaseUrl">Base URL:</label>
+                    <input type="url" id="formatBaseUrl" placeholder="e.g., https://i006.imx.to/i/2025/07/15/">
+                </div>
+                <div class="format-preview" id="formatPreview" hidden>
+                    <p><strong>Generated URLs (<span id="formatCount">0</span>):</strong></p>
+                    <pre id="formatResult"></pre>
+                </div>
+                <div class="format-actions">
+                    <button type="button" class="btn btn-preview" id="formatPreviewBtn">Preview</button>
+                    <button type="submit" class="btn btn-submit" id="formatSaveBtn">Save Images to Movie</button>
+                </div>
             </form>
         </div>
     </div>

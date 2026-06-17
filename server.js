@@ -264,7 +264,7 @@ app.put('/api/stars/:starId', requireDB, async (req, res) => {
 
 app.post('/api/stars/:starId/movies', requireDB, async (req, res) => {
   try {
-    const star = await Star.findById(req.params.starId);
+    const star = await getStarByParam(req.params.starId);
     if (!star) return res.status(404).json({ error: 'Star not found' });
 
     const videoTitle = normalizeStarName(req.body.videoTitle);
@@ -316,7 +316,7 @@ app.post('/api/stars/:starId/movies', requireDB, async (req, res) => {
 
 app.put('/api/stars/:starId/movies/:movieIndex', requireDB, async (req, res) => {
   try {
-    const star = await Star.findById(req.params.starId);
+    const star = await getStarByParam(req.params.starId);
     if (!star) return res.status(404).json({ error: 'Star not found' });
 
     const movieIndex = parseInt(req.params.movieIndex, 10);
@@ -374,7 +374,7 @@ app.delete('/api/stars/:starId', requireDB, async (req, res) => {
 
 app.delete('/api/stars/:starId/movies/:movieIndex', requireDB, async (req, res) => {
   try {
-    const star = await Star.findById(req.params.starId);
+    const star = await getStarByParam(req.params.starId);
     if (!star) return res.status(404).json({ error: 'Star not found' });
 
     const movieIndex = parseInt(req.params.movieIndex, 10);
