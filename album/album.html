@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Album Viewer</title>
+    <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+    <div class="album-container">
+        <header class="header">
+            <button class="btn btn-back" id="albumBackBtn">← Back to Star</button>
+            <h1 id="albumTitle">Album</h1>
+            <div class="header-buttons">
+                <label class="columns-control" for="albumColumnsSelect">
+                    <span>Grid size</span>
+                    <select id="albumColumnsSelect">
+                        <option value="2">2</option>
+                        <option value="3">3</option>
+                        <option value="4">4</option>
+                        <option value="5">5</option>
+                        <option value="6">6</option>
+                    </select>
+                </label>
+            </div>
+        </header>
+
+        <div class="album-grid" id="albumGrid">
+            <!-- Images rendered here -->
+        </div>
+    </div>
+
+    <!-- Lightbox -->
+    <div class="album-lightbox" id="albumLightbox">
+        <button class="lightbox-close" id="lightboxClose">&times;</button>
+        <button class="lightbox-nav lightbox-prev" id="lightboxPrev">‹</button>
+        <div class="lightbox-image-wrapper">
+            <img id="lightboxImage" src="" alt="Enlarged image">
+        </div>
+        <button class="lightbox-nav lightbox-next" id="lightboxNext">›</button>
+        <div class="lightbox-counter" id="lightboxCounter"></div>
+    </div>
+
+    <script src="album.js"></script>
+</body>
+</html>

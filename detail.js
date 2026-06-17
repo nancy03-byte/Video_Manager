@@ -761,6 +761,7 @@ async function renderMovies() {
 
         const actionButtonsHTML = `
             <div class="movie-buttons-row action-buttons-row fixed-row">
+                <button class="btn-album" data-album-index="${movieIndex}">Album</button>
                 <button class="btn-edit" data-edit-index="${movieIndex}">Edit</button>
                 <button class="btn-delete-movie" data-delete-index="${movieIndex}">Delete</button>
             </div>
@@ -802,6 +803,7 @@ async function renderMovies() {
             });
         }
 
+        movieCard.querySelector('[data-album-index]')?.addEventListener('click', () => openAlbum(movieIndex));
         movieCard.querySelector('[data-edit-index]')?.addEventListener('click', () => editMovie(movieIndex));
         movieCard.querySelector('[data-delete-index]')?.addEventListener('click', () => deleteMovie(movieIndex));
 
@@ -909,6 +911,18 @@ function pausePreviewVideo(videoElement) {
 
     videoElement.pause();
     videoElement.currentTime = 0;
+}
+
+// Open album page for a movie
+function openAlbum(movieIndex) {
+    const movie = currentStar.movies[movieIndex];
+    if (!movie) return;
+    const images = splitCommaSeparated(movie.images);
+    if (images.length === 0) {
+        alert('No images available for this movie.');
+        return;
+    }
+    window.open(`album/album.html?starId=${currentStar.id}&movieIndex=${movieIndex}`, '_blank');
 }
 
 // Open URL in new tab
