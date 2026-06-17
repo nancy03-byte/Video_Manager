@@ -38,8 +38,8 @@ function setupEventListeners() {
     });
 }
 
-// API Base URL
-const API_URL = "http://localhost:3000/api";
+// API Base URL (use relative path so deployed site calls its backend)
+const API_URL = '/api';
 
 function setupFilterDropdowns() {
     filterDropdowns.star = createCheckboxDropdown(starFilterMount, {
