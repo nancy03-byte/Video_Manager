@@ -85,6 +85,8 @@ const movieSchema = new mongoose.Schema({
   videoUrl: { type: String, default: '' },
   previewVideoUrl: { type: String, default: '' },
   images: { type: String, default: '' },
+  albumImages: { type: String, default: '' },
+  favoriteImages: { type: String, default: '' },
   starNames: [String],
 });
 
@@ -286,6 +288,8 @@ app.post('/api/stars/:starId/movies', requireDB, async (req, res) => {
       videoUrl: req.body.videoUrl || '',
       previewVideoUrl: req.body.previewVideoUrl || '',
       images: req.body.images || '',
+      albumImages: req.body.albumImages || '',
+      favoriteImages: req.body.favoriteImages || '',
       starNames: [star.name],
     };
 
@@ -338,6 +342,8 @@ app.put('/api/stars/:starId/movies/:movieIndex', requireDB, async (req, res) => 
       videoUrl: req.body.videoUrl || '',
       previewVideoUrl: req.body.previewVideoUrl || '',
       images: req.body.images || '',
+      albumImages: req.body.albumImages || '',
+      favoriteImages: req.body.favoriteImages || '',
       starNames: [star.name],
     };
 
@@ -369,6 +375,36 @@ app.delete('/api/stars/:starId', requireDB, async (req, res) => {
   } catch (error) {
     console.error('Error deleting star:', error);
     res.status(500).json({ error: 'Failed to delete star' });
+  }
+});
+
+// ── Album endpoints ───────────────────────────────────────────────────────
+
+app.patch('/api/stars/:starId/movies/:movieIndex/album', requireDB, async (req, res) => {
+  try {
+    const star = await getStarByParam(req.params.starId);
+    if (!star) return res.status(404).json({ error: 'Star not found' });
+
+    const movieIndex = parseInt(req.params.movieIndex, 10);
+    if (Number.isNaN(movieIndex) || movieIndex < 0 || movieIndex >= star.movies.length) {
+      return res.status(404).json({ error: 'Movie not found' });
+    }
+
+    const movie = star.movies[movieIndex];
+
+    if (req.body.albumImages !== undefined) {
+      movie.albumImages = String(req.body.albumImages);
+    }
+    if (req.body.favoriteImages !== undefined) {
+      movie.favoriteImages = String(req.body.favoriteImages);
+    }
+
+    const savedStar = await star.save();
+    invalidateCache('stars');
+    res.json({ albumImages: movie.albumImages, favoriteImages: movie.favoriteImages });
+  } catch (error) {
+    console.error('Error updating album:', error);
+    res.status(500).json({ error: 'Failed to update album' });
   }
 });
 

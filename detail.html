@@ -70,7 +70,6 @@
                         </select>
                     </label>
                     <button class="btn btn-add" id="addMovieBtn">+ Add Movie</button>
-                    <button class="btn btn-add" id="addMovieAndFormatBtn">+ Add Movie & Format Images</button>
                     <button class="btn btn-slideshow-toggle" id="toggleSlideshowsBtn" type="button">Stop Slides</button>
                 </div>
             </div>
@@ -80,37 +79,65 @@
         </div>
     </div>
 
-    <!-- Add Movie Modal -->
+    <!-- Add / Edit Movie Modal -->
     <div class="modal" id="addMovieModal">
-        <div class="modal-content">
+        <div class="modal-content modal-content-wide">
             <span class="close" id="closeMovieModal">&times;</span>
-            <h2>Add New Movie</h2>
+            <h2 id="movieModalTitle">Add New Movie</h2>
             <form id="addMovieForm">
-                <div class="form-group">
-                    <label for="movieTitle">Video Title: <span style="color: red;">*</span></label>
-                    <input type="text" id="movieTitle" required>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="movieTitle">Video Title: <span style="color: red;">*</span></label>
+                        <input type="text" id="movieTitle" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="siteName">Site Name: <span style="color: red;">*</span></label>
+                        <input type="text" id="siteName" required>
+                    </div>
                 </div>
                 <div class="form-group">
                     <label for="movieStars">Stars (comma-separated):</label>
                     <input type="text" id="movieStars" placeholder="e.g., Star Name 1, Star Name 2">
                 </div>
                 <div class="form-group">
-                    <label for="siteName">Site Name: <span style="color: red;">*</span></label>
-                    <input type="text" id="siteName" required>
-                </div>
-                <div class="form-group">
                     <label for="movieImages">Movie Images (comma-separated URLs):</label>
                     <textarea id="movieImages" placeholder="https://image1.jpg, https://image2.jpg, https://image3.jpg" rows="3"></textarea>
                 </div>
-                <div class="form-group">
-                    <label for="previewVideoUrl">Preview Video URL:</label>
-                    <input type="url" id="previewVideoUrl" placeholder="https://preview.mp4">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="previewVideoUrl">Preview Video URL:</label>
+                        <input type="url" id="previewVideoUrl" placeholder="https://preview.mp4">
+                    </div>
+                    <div class="form-group">
+                        <label for="videoUrl">Watch URLs (comma-sep):</label>
+                        <textarea id="videoUrl" placeholder="https://video1.html, https://video2.html" rows="2"></textarea>
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label for="videoUrl">Watch Video URLs (comma-separated):</label>
-                    <textarea id="videoUrl" placeholder="https://video1.html, https://video2.html" rows="2"></textarea>
-                </div>
-                <button type="submit" class="btn btn-submit">Add Movie</button>
+
+                <!-- ── Album Configuration Section ── -->
+                <details class="album-config-details" id="albumConfigDetails">
+                    <summary class="album-config-summary">
+                        <span class="album-config-toggle-text">📸 Album Configuration (optional)</span>
+                    </summary>
+                    <div class="album-config-body">
+                        <p class="album-config-hint">Paste HTML containing image anchors (e.g. from imx.to) and a base URL to automatically generate album images.</p>
+                        <div class="form-group">
+                            <label for="albumSourceHtml">Source HTML:</label>
+                            <textarea id="albumSourceHtml" rows="4" placeholder='Paste HTML containing href="https://imx.to/i/XXXXX" patterns'></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label for="albumBaseUrl">Target Base URL:</label>
+                            <input type="url" id="albumBaseUrl" placeholder="e.g., https://i006.imx.to/i/2025/07/15/">
+                        </div>
+                        <div class="album-config-preview" id="albumConfigPreview" hidden>
+                            <p><strong>Generated URLs (<span id="albumConfigCount">0</span>):</strong></p>
+                            <pre id="albumConfigResult"></pre>
+                        </div>
+                        <button type="button" class="btn btn-preview-compact" id="albumConfigPreviewBtn">Preview</button>
+                    </div>
+                </details>
+
+                <button type="submit" class="btn btn-submit" id="saveMovieBtn">💾 Save Movie</button>
             </form>
         </div>
     </div>
@@ -130,33 +157,6 @@
                     <input type="url" id="editStarPictureUrl" required>
                 </div>
                 <button type="submit" class="btn btn-submit">Save Changes</button>
-            </form>
-        </div>
-    </div>
-
-    <!-- Image Format Modal (Step 2) -->
-    <div class="modal" id="formatImagesModal">
-        <div class="modal-content">
-            <span class="close" id="closeFormatModal">&times;</span>
-            <h2>Format Movie Images</h2>
-            <p class="format-instructions">Paste the HTML containing image links, then specify the replacement base URL.</p>
-            <form id="formatImagesForm">
-                <div class="form-group">
-                    <label for="formatSourceHtml">Source HTML:</label>
-                    <textarea id="formatSourceHtml" rows="6" placeholder='Paste HTML here, e.g.: <a href="https://imx.to/i/67m16f">...</a>'></textarea>
-                </div>
-                <div class="form-group">
-                    <label for="formatBaseUrl">Base URL:</label>
-                    <input type="url" id="formatBaseUrl" placeholder="e.g., https://i006.imx.to/i/2025/07/15/">
-                </div>
-                <div class="format-preview" id="formatPreview" hidden>
-                    <p><strong>Generated URLs (<span id="formatCount">0</span>):</strong></p>
-                    <pre id="formatResult"></pre>
-                </div>
-                <div class="format-actions">
-                    <button type="button" class="btn btn-preview" id="formatPreviewBtn">Preview</button>
-                    <button type="submit" class="btn btn-submit" id="formatSaveBtn">Save Images to Movie</button>
-                </div>
             </form>
         </div>
     </div>

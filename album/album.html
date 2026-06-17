@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Album Viewer</title>
+    <title>Album Viewer & Editor</title>
     <link rel="stylesheet" href="../styles.css">
 </head>
 <body>
@@ -12,6 +12,8 @@
             <button class="btn btn-back" id="albumBackBtn">← Back to Star</button>
             <h1 id="albumTitle">Album</h1>
             <div class="header-buttons">
+                <button class="btn btn-slideshow-toggle" id="albumSlideshowBtn">▶ Launch Slideshow</button>
+                <button class="btn btn-submit" id="editRawUrlsBtn">✏ Edit Raw URLs</button>
                 <label class="columns-control" for="albumColumnsSelect">
                     <span>Grid size</span>
                     <select id="albumColumnsSelect">
@@ -39,6 +41,36 @@
         </div>
         <button class="lightbox-nav lightbox-next" id="lightboxNext">›</button>
         <div class="lightbox-counter" id="lightboxCounter"></div>
+    </div>
+
+    <!-- Edit Raw URLs Modal -->
+    <div class="modal" id="editRawModal">
+        <div class="modal-content">
+            <span class="close" id="closeRawModal">&times;</span>
+            <h2>Edit Raw Album URLs</h2>
+            <p class="album-config-hint">Edit the comma-separated list of album image URLs directly.</p>
+            <form id="editRawForm">
+                <div class="form-group">
+                    <label for="rawAlbumUrls">Album Images (comma-separated URLs):</label>
+                    <textarea id="rawAlbumUrls" rows="8" placeholder="https://image1.jpg, https://image2.jpg, ..."></textarea>
+                </div>
+                <button type="submit" class="btn btn-submit">Save Changes</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Slideshow Fullscreen -->
+    <div class="album-slideshow" id="albumSlideshow">
+        <button class="lightbox-close" id="slideshowClose">&times;</button>
+        <div class="slideshow-stage" id="slideshowStage">
+            <img id="slideshowImage" src="" alt="Slideshow">
+        </div>
+        <div class="slideshow-controls">
+            <button class="btn btn-slideshow-ctrl" id="slideshowPrev">⏮ Prev</button>
+            <span class="slideshow-counter" id="slideshowCounter">0 / 0</span>
+            <button class="btn btn-slideshow-ctrl" id="slideshowNext">Next ⏭</button>
+            <button class="btn btn-slideshow-ctrl btn-slideshow-play" id="slideshowPlayPause">⏸ Pause</button>
+        </div>
     </div>
 
     <script src="album.js"></script>

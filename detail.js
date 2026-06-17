@@ -1,4 +1,4 @@
-// ── Shared Cache (same as script.js) ─────────────────────────────────────
+// ── Shared Cache ─────────────────────────────────────────────────────
 const DETAIL_CACHE = {
   data: null,
   timestamp: 0,
@@ -26,18 +26,17 @@ function debounce(fn, delay) {
 }
 // ──────────────────────────────────────────────────────────────────────────
 
-// API Base URL (use relative path so deployed site calls its backend)
 const API_URL = '/api';
 
 // DOM Elements
 const backBtn = document.getElementById('backBtn');
 const addMovieBtn = document.getElementById('addMovieBtn');
-const addMovieAndFormatBtn = document.getElementById('addMovieAndFormatBtn');
 const editStarBtn = document.getElementById('editStarBtn');
 const deleteStarBtn = document.getElementById('deleteStarBtn');
 const addMovieModal = document.getElementById('addMovieModal');
 const closeMovieModal = document.getElementById('closeMovieModal');
 const addMovieForm = document.getElementById('addMovieForm');
+const movieModalTitle = document.getElementById('movieModalTitle');
 const editStarModal = document.getElementById('editStarModal');
 const closeEditStarModal = document.getElementById('closeEditStarModal');
 const editStarForm = document.getElementById('editStarForm');
@@ -53,7 +52,16 @@ const toggleSlideshowsBtn = document.getElementById('toggleSlideshowsBtn');
 const movieColumnsSelect = document.getElementById('movieColumnsSelect');
 const moviesGrid = document.getElementById('moviesGrid');
 
-// Global data
+// Album config DOM
+const albumConfigDetails = document.getElementById('albumConfigDetails');
+const albumSourceHtml = document.getElementById('albumSourceHtml');
+const albumBaseUrl = document.getElementById('albumBaseUrl');
+const albumConfigPreview = document.getElementById('albumConfigPreview');
+const albumConfigCount = document.getElementById('albumConfigCount');
+const albumConfigResult = document.getElementById('albumConfigResult');
+const albumConfigPreviewBtn = document.getElementById('albumConfigPreviewBtn');
+
+// Global state
 let currentStar = null;
 let starsData = [];
 let filteredMovies = [];
@@ -61,20 +69,6 @@ let slideShowIntervals = {};
 let areSlideshowsPaused = false;
 let editingMovieIndex = null;
 let movieSiteFilterDropdown = null;
-let isFormatFlow = false;
-let pendingMovieId = null;
-
-// ── Format Images Modal DOM refs ──────────────────────────────────────────
-const formatImagesModal = document.getElementById('formatImagesModal');
-const closeFormatModal = document.getElementById('closeFormatModal');
-const formatImagesForm = document.getElementById('formatImagesForm');
-const formatSourceHtml = document.getElementById('formatSourceHtml');
-const formatBaseUrl = document.getElementById('formatBaseUrl');
-const formatPreview = document.getElementById('formatPreview');
-const formatCount = document.getElementById('formatCount');
-const formatResult = document.getElementById('formatResult');
-const formatPreviewBtn = document.getElementById('formatPreviewBtn');
-const formatSaveBtn = document.getElementById('formatSaveBtn');
 
 // Initialize
 document.addEventListener('DOMContentLoaded', async () => {
@@ -88,20 +82,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     setupEventListeners();
 });
 
-// Setup event listeners
 function setupEventListeners() {
     backBtn.addEventListener('click', goBack);
     addMovieBtn.addEventListener('click', openAddMovieModal);
-    addMovieAndFormatBtn.addEventListener('click', openAddMovieAndFormat);
     editStarBtn.addEventListener('click', openEditStarModal);
     deleteStarBtn.addEventListener('click', deleteStar);
     closeMovieModal.addEventListener('click', () => closeMovieModalDialog());
     closeEditStarModal.addEventListener('click', () => closeEditStarModalDialog());
-    closeFormatModal.addEventListener('click', closeFormatModalDialog);
-    addMovieForm.addEventListener('submit', handleAddMovie);
+    addMovieForm.addEventListener('submit', handleSaveMovie);
     editStarForm.addEventListener('submit', handleEditStar);
-    formatImagesForm.addEventListener('submit', handleFormatSave);
-    formatPreviewBtn.addEventListener('click', handleFormatPreview);
     document.getElementById('movieImages').addEventListener('blur', (event) => addTrailingComma(event.target));
     document.getElementById('videoUrl').addEventListener('blur', (event) => addTrailingComma(event.target));
     document.getElementById('movieImages').addEventListener('keydown', handleCommaFieldEnter);
@@ -114,8 +103,64 @@ function setupEventListeners() {
     window.addEventListener('click', (e) => {
         if (e.target === addMovieModal) closeMovieModalDialog();
         if (e.target === editStarModal) closeEditStarModalDialog();
-        if (e.target === formatImagesModal) closeFormatModalDialog();
     });
+
+    // Album config events
+    albumSourceHtml.addEventListener('input', onAlbumConfigChange);
+    albumBaseUrl.addEventListener('input', onAlbumConfigChange);
+    albumConfigPreviewBtn.addEventListener('click', handleAlbumConfigPreview);
+}
+
+function onAlbumConfigChange() {
+    // If source has content and base URL is empty, highlight the base URL field
+    const source = albumSourceHtml.value.trim();
+    const base = albumBaseUrl.value.trim();
+    if (source && !base) {
+        albumBaseUrl.classList.add('field-highlight-required');
+    } else {
+        albumBaseUrl.classList.remove('field-highlight-required');
+    }
+    // Hide preview when input changes
+    albumConfigPreview.hidden = true;
+}
+
+function handleAlbumConfigPreview() {
+    const sourceHtml = albumSourceHtml.value;
+    const baseUrl = albumBaseUrl.value.trim();
+
+    if (!sourceHtml) {
+        alert('Please paste the source HTML first.');
+        return;
+    }
+    if (!baseUrl) {
+        alert('Target Base URL is required when Source HTML is provided.');
+        albumBaseUrl.focus();
+        return;
+    }
+
+    const urls = parseAlbumImages(sourceHtml, baseUrl);
+    if (urls.length === 0) {
+        alert('No image IDs found in the HTML. Make sure it contains href="https://imx.to/i/XXXXX" patterns.');
+        albumConfigPreview.hidden = true;
+        return;
+    }
+
+    albumConfigCount.textContent = urls.length;
+    albumConfigResult.textContent = urls.join(',\n');
+    albumConfigPreview.hidden = false;
+}
+
+function parseAlbumImages(sourceHtml, baseUrl) {
+    if (!sourceHtml || !baseUrl) return [];
+    const ids = [];
+    const regex = /href="https:\/\/imx\.to\/i\/([a-zA-Z0-9]+)"/g;
+    let match;
+    while ((match = regex.exec(sourceHtml)) !== null) {
+        const id = match[1];
+        const baseNormalized = baseUrl.endsWith('/') ? baseUrl : baseUrl + '/';
+        ids.push(`${baseNormalized}${id}.jpg`);
+    }
+    return ids;
 }
 
 function setupMovieFilterDropdown() {
@@ -201,10 +246,7 @@ function createCheckboxDropdown(selectElement, { title, emptyLabel }) {
 }
 
 function toggleDropdown(state, forceOpen) {
-    if (!state) {
-        return;
-    }
-
+    if (!state) return;
     const nextOpen = typeof forceOpen === "boolean" ? forceOpen : !state.isOpen;
     state.isOpen = nextOpen;
     state.panel.hidden = !nextOpen;
@@ -213,16 +255,11 @@ function toggleDropdown(state, forceOpen) {
 }
 
 function closeAllDropdowns() {
-    if (movieSiteFilterDropdown) {
-        closeDropdown(movieSiteFilterDropdown);
-    }
+    if (movieSiteFilterDropdown) closeDropdown(movieSiteFilterDropdown);
 }
 
 function closeDropdown(state) {
-    if (!state) {
-        return;
-    }
-
+    if (!state) return;
     state.isOpen = false;
     state.panel.hidden = true;
     state.root.classList.remove("is-open");
@@ -230,10 +267,7 @@ function closeDropdown(state) {
 }
 
 function setDropdownOptions(state, options) {
-    if (!state) {
-        return;
-    }
-
+    if (!state) return;
     state.options = options;
     const validValues = new Set(options.map((option) => option.value));
     state.selected = new Set(Array.from(state.selected).filter((value) => validValues.has(value)));
@@ -241,18 +275,12 @@ function setDropdownOptions(state, options) {
 }
 
 function renderDropdown(state) {
-    if (!state) {
-        return;
-    }
+    if (!state) return;
 
     const sortedOptions = [...state.options].sort((left, right) => {
         const leftSelected = state.selected.has(left.value);
         const rightSelected = state.selected.has(right.value);
-
-        if (leftSelected !== rightSelected) {
-            return leftSelected ? -1 : 1;
-        }
-
+        if (leftSelected !== rightSelected) return leftSelected ? -1 : 1;
         return left.label.localeCompare(right.label);
     });
 
@@ -269,7 +297,6 @@ function renderDropdown(state) {
 
     const actions = document.createElement("div");
     actions.className = "checkbox-dropdown-actions";
-
     const clearButton = document.createElement("button");
     clearButton.type = "button";
     clearButton.textContent = "Clear";
@@ -279,7 +306,6 @@ function renderDropdown(state) {
         renderDropdown(state);
         applyMovieFilters();
     });
-
     actions.appendChild(clearButton);
     state.panel.appendChild(actions);
 
@@ -289,27 +315,22 @@ function renderDropdown(state) {
         if (state.selected.has(option.value)) {
             optionLabel.classList.add("is-selected");
         }
-
         const checkbox = document.createElement("input");
         checkbox.type = "checkbox";
         checkbox.value = option.value;
         checkbox.checked = state.selected.has(option.value);
-
         const text = document.createElement("span");
         text.className = "checkbox-dropdown-option-label";
         text.textContent = option.label;
-
         checkbox.addEventListener("change", () => {
             if (checkbox.checked) {
                 state.selected.add(option.value);
             } else {
                 state.selected.delete(option.value);
             }
-
             renderDropdown(state);
             applyMovieFilters();
         });
-
         optionLabel.append(checkbox, text);
         state.panel.appendChild(optionLabel);
     });
@@ -318,10 +339,7 @@ function renderDropdown(state) {
 }
 
 function updateDropdownSummary(state) {
-    if (!state) {
-        return;
-    }
-
+    if (!state) return;
     const selectedCount = state.selected.size;
     if (selectedCount === 0) {
         state.summarySpan.textContent = state.emptyLabel;
@@ -363,18 +381,15 @@ async function loadData() {
     } catch (error) {
         console.log('Server not running, loading from localStorage...');
     }
-
     await loadFromLocalStorage();
 }
 
-// Load from localStorage fallback
 async function loadFromLocalStorage() {
     const savedData = localStorage.getItem('starsData');
     if (savedData) {
         starsData = JSON.parse(savedData);
         return;
     }
-
     try {
         const response = await fetch('data.json');
         const data = await response.json();
@@ -386,24 +401,19 @@ async function loadFromLocalStorage() {
     }
 }
 
-// Load star details
 function loadStarDetails(starId) {
     currentStar = starsData.find(star => star.id === starId);
-
     if (!currentStar) {
         alert('Star not found!');
         window.location.href = 'index.html';
         return;
     }
-
-    // Update header and info
     starTitle.textContent = currentStar.name;
     starNameElement.textContent = currentStar.name;
     starImage.src = currentStar.pictureUrl;
     starImage.onerror = () => {
         starImage.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='250' height='300'%3E%3Crect fill='%23ddd' width='100%25' height='100%25'/%3E%3Ctext x='50%25' y='50%25' text-anchor='middle' dy='.1em' fill='%23666' font-family='sans-serif' font-size='18'%3EImage Not Found%3C/text%3E%3C/svg%3E";
     };
-
     updateMovieCount();
     populateMovieFilters();
     applyMovieFilters();
@@ -419,16 +429,12 @@ function splitCommaSeparated(value) {
 
 function normalizeNameList(values) {
     const seen = new Set();
-
     return values
         .map((value) => String(value || '').trim())
         .filter(Boolean)
         .filter((value) => {
             const key = value.toLowerCase();
-            if (seen.has(key)) {
-                return false;
-            }
-
+            if (seen.has(key)) return false;
             seen.add(key);
             return true;
         });
@@ -443,40 +449,25 @@ function getMovieStarNames(movieStarsValue) {
 
 function createLocalStarIfNeeded(name) {
     const normalizedName = String(name || '').trim();
-    if (!normalizedName) {
-        return null;
-    }
-
+    if (!normalizedName) return null;
     let star = starsData.find((candidate) => candidate.name.toLowerCase() === normalizedName.toLowerCase());
-    if (star) {
-        return star;
-    }
-
+    if (star) return star;
     star = {
         id: Date.now() + Math.floor(Math.random() * 1000000),
         name: normalizedName,
         pictureUrl: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='400'%3E%3Crect fill='%23ddd' width='100%25' height='100%25'/%3E%3Ctext x='50%25' y='50%25' text-anchor='middle' dy='.1em' fill='%23666' font-family='sans-serif' font-size='18'%3EImage Not Found%3C/text%3E%3C/svg%3E",
         movies: []
     };
-
     starsData.push(star);
     return star;
 }
 
 function applyMovieToLocalProfiles(moviePayload, starNames) {
     const uniqueNames = normalizeNameList(starNames);
-
     uniqueNames.forEach((name) => {
         const star = createLocalStarIfNeeded(name);
-        if (!star) {
-            return;
-        }
-
-        const movieCopy = {
-            ...moviePayload,
-            starNames: [name]
-        };
-
+        if (!star) return;
+        const movieCopy = { ...moviePayload, starNames: [name] };
         const existingMovieIndex = star.movies.findIndex((movie) => String(movie.id) === String(moviePayload.id));
         if (existingMovieIndex >= 0) {
             star.movies[existingMovieIndex] = movieCopy;
@@ -496,10 +487,7 @@ function addTrailingComma(inputElement) {
 }
 
 function handleCommaFieldEnter(event) {
-    if (event.key !== 'Enter') {
-        return;
-    }
-
+    if (event.key !== 'Enter') return;
     event.preventDefault();
     addTrailingComma(event.target);
     event.target.selectionStart = event.target.value.length;
@@ -508,18 +496,13 @@ function handleCommaFieldEnter(event) {
 
 function getMovieSiteValues(movies) {
     const sites = Array.isArray(movies)
-        ? movies
-            .map(movie => movie.siteName || movie.siteNameLink || movie.siteUrl || '')
-            .filter(Boolean)
+        ? movies.map(movie => movie.siteName || movie.siteNameLink || movie.siteUrl || '').filter(Boolean)
         : [];
-
     return Array.from(new Set(sites));
 }
 
 function getMovieSiteFilterValues(movies) {
-    return getMovieSiteValues(movies)
-        .map(normalizeSiteFilterValue)
-        .filter(Boolean);
+    return getMovieSiteValues(movies).map(normalizeSiteFilterValue).filter(Boolean);
 }
 
 function getMovieSearchText(movie) {
@@ -534,12 +517,8 @@ function getMovieOriginalIndex(movie) {
     return currentStar.movies.indexOf(movie);
 }
 
-// Utility: Extract domain name from URL or plain domain
 function extractDomainName(value) {
-    if (!value) {
-        return 'Site';
-    }
-
+    if (!value) return 'Site';
     try {
         const normalizedValue = value.includes('://') ? value : `https://${value}`;
         const urlObj = new URL(normalizedValue);
@@ -556,26 +535,15 @@ function extractDomainName(value) {
 }
 
 function normalizeSiteFilterValue(value) {
-    if (!value) {
-        return '';
-    }
-
+    if (!value) return '';
     const trimmedValue = String(value).trim();
-    if (!trimmedValue) {
-        return '';
-    }
-
+    if (!trimmedValue) return '';
     try {
         const normalizedValue = trimmedValue.includes('://') ? trimmedValue : `https://${trimmedValue}`;
         const urlObj = new URL(normalizedValue);
         return urlObj.hostname.replace(/^www\./i, '').toLowerCase();
     } catch (error) {
-        return trimmedValue
-            .replace(/^https?:\/\//i, '')
-            .replace(/^www\./i, '')
-            .split('/')[0]
-            .trim()
-            .toLowerCase();
+        return trimmedValue.replace(/^https?:\/\//i, '').replace(/^www\./i, '').split('/')[0].trim().toLowerCase();
     }
 }
 
@@ -591,11 +559,9 @@ function populateMovieFilters() {
             siteOptionsByValue.set(value, extractDomainName(site));
         }
     });
-
     const siteOptions = Array.from(siteOptionsByValue.entries())
         .map(([value, label]) => ({ value, label }))
         .sort((a, b) => a.label.localeCompare(b.label));
-
     setDropdownOptions(movieSiteFilterDropdown, siteOptions);
 }
 
@@ -608,9 +574,7 @@ function sortMovies(movies) {
         const leftIndex = getMovieOriginalIndex(leftMovie);
         const rightIndex = getMovieOriginalIndex(rightMovie);
 
-        if (sortValue === 'insertion-desc') {
-            return rightIndex - leftIndex;
-        }
+        if (sortValue === 'insertion-desc') return rightIndex - leftIndex;
 
         if (sortValue === 'title-asc' || sortValue === 'title-desc') {
             const leftTitle = leftMovie.videoTitle || '';
@@ -641,12 +605,10 @@ function applyMovieFilters() {
         const matchesSites =
             selectedSites.size === 0 ||
             getMovieSiteFilterValues([movie]).some(site => selectedSites.has(site));
-
         return matchesSearch && matchesSites;
     });
 
     filteredMovies = sortMovies(filteredMovies);
-
     renderMovies();
 }
 
@@ -792,9 +754,12 @@ async function renderMovies() {
             'Video'
         );
 
+        // Check if movie has album images
+        const albumImages = splitCommaSeparated(movie.albumImages || movie.images);
+        const albumButtonDisabled = albumImages.length === 0;
         const actionButtonsHTML = `
             <div class="movie-buttons-row action-buttons-row fixed-row">
-                <button class="btn-album" data-album-index="${movieIndex}">Album</button>
+                <button class="btn-album" data-album-index="${movieIndex}" ${albumButtonDisabled ? 'disabled' : ''}>${albumButtonDisabled ? 'No Album' : 'Album'}</button>
                 <button class="btn-edit" data-edit-index="${movieIndex}">Edit</button>
                 <button class="btn-delete-movie" data-delete-index="${movieIndex}">Delete</button>
             </div>
@@ -805,6 +770,7 @@ async function renderMovies() {
             <div class="movie-info">
                 <h4>${movie.videoTitle}</h4>
                 ${images.length > 0 ? `<p><strong>Images:</strong> ${images.length} image${images.length !== 1 ? 's' : ''}</p>` : '<p class="movie-info-placeholder">&nbsp;</p>'}
+                ${albumImages.length > 0 ? `<p class="album-badge">📸 Album: ${albumImages.length} image${albumImages.length !== 1 ? 's' : ''}</p>` : ''}
                 ${sitePreviewButtonsHTML}
                 ${watchButtonsHTML}
                 ${actionButtonsHTML}
@@ -851,33 +817,20 @@ async function renderMovies() {
 }
 
 function startSlideshow(movieIndex) {
-    if (areSlideshowsPaused || slideShowIntervals[movieIndex]) {
-        return;
-    }
-
+    if (areSlideshowsPaused || slideShowIntervals[movieIndex]) return;
     slideShowIntervals[movieIndex] = setInterval(() => {
         const movieCard = document.querySelector(`[data-movie-index="${movieIndex}"]`);
-        if (!movieCard) {
-            stopSlideshow(movieIndex);
-            return;
-        }
-
+        if (!movieCard) { stopSlideshow(movieIndex); return; }
         const slides = movieCard.querySelectorAll('.slide');
-        if (slides.length <= 1) {
-            return;
-        }
-
+        if (slides.length <= 1) return;
         const activeSlide = movieCard.querySelector('.slide.active') || slides[0];
         const currentIndex = Array.from(slides).indexOf(activeSlide);
         const nextIndex = (currentIndex + 1) % slides.length;
-
         activeSlide.classList.remove('active');
         activeSlide.style.opacity = '0';
-
         slides[nextIndex].classList.add('active');
         slides[nextIndex].style.opacity = '1';
     }, 3000);
-
 }
 
 function stopSlideshow(movieIndex) {
@@ -903,20 +856,17 @@ function startAllSlideshows() {
 
 function toggleAllSlideshows() {
     areSlideshowsPaused = !areSlideshowsPaused;
-
     if (areSlideshowsPaused) {
         stopAllSlideshows();
     } else {
         startAllSlideshows();
     }
-
     updateSlideshowsButton();
 }
 
 function updateSlideshowsButton(movies = filteredMovies) {
     const hasMultipleImageMovie = Array.isArray(movies)
         && movies.some(movie => splitCommaSeparated(movie.images).length > 1);
-
     toggleSlideshowsBtn.hidden = !hasMultipleImageMovie;
     toggleSlideshowsBtn.disabled = !hasMultipleImageMovie;
     toggleSlideshowsBtn.textContent = areSlideshowsPaused ? 'Start Slides' : 'Stop Slides';
@@ -924,10 +874,7 @@ function updateSlideshowsButton(movies = filteredMovies) {
 }
 
 function playPreviewVideo(videoElement) {
-    if (!videoElement) {
-        return;
-    }
-
+    if (!videoElement) return;
     const playPromise = videoElement.play();
     if (playPromise && typeof playPromise.catch === 'function') {
         playPromise.catch(() => {});
@@ -935,10 +882,7 @@ function playPreviewVideo(videoElement) {
 }
 
 function pausePreviewVideo(videoElement) {
-    if (!videoElement) {
-        return;
-    }
-
+    if (!videoElement) return;
     videoElement.pause();
     videoElement.currentTime = 0;
 }
@@ -947,32 +891,34 @@ function pausePreviewVideo(videoElement) {
 function openAlbum(movieIndex) {
     const movie = currentStar.movies[movieIndex];
     if (!movie) return;
-    const images = splitCommaSeparated(movie.images);
-    if (images.length === 0) {
-        alert('No images available for this movie.');
+    const albumImages = splitCommaSeparated(movie.albumImages || movie.images);
+    if (albumImages.length === 0) {
+        alert('No album images available for this movie.');
         return;
     }
-    window.open(`album/album.html?starId=${currentStar.id}&movieIndex=${movieIndex}`, '_blank');
+    window.location.href = `album/album.html?starId=${currentStar.id}&movieIndex=${movieIndex}`;
 }
 
 function openInNewTab(url) {
     window.open(url, '_blank');
 }
 
-function extractYouTubeId(url) {
-    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
-    const match = url.match(regExp);
-    return match && match[2].length === 11 ? match[2] : null;
-}
-
 // Open add movie modal
 function openAddMovieModal() {
-    if (editingMovieIndex === null) {
-        document.getElementById('siteName').value = getLastMovieSiteName();
-        if (currentStar) {
-            document.getElementById('movieStars').value = currentStar.name;
-        }
+    editingMovieIndex = null;
+    movieModalTitle.textContent = 'Add New Movie';
+    document.getElementById('siteName').value = getLastMovieSiteName();
+    if (currentStar) {
+        document.getElementById('movieStars').value = currentStar.name;
     }
+    document.getElementById('movieTitle').value = '';
+    document.getElementById('videoUrl').value = '';
+    document.getElementById('previewVideoUrl').value = '';
+    document.getElementById('movieImages').value = '';
+    albumSourceHtml.value = '';
+    albumBaseUrl.value = '';
+    albumConfigPreview.hidden = true;
+    albumConfigDetails.removeAttribute('open');
     addMovieModal.classList.add('show');
 }
 
@@ -980,28 +926,24 @@ function getLastMovieSiteName() {
     const movies = Array.isArray(currentStar?.movies) ? currentStar.movies : [];
     for (let index = movies.length - 1; index >= 0; index--) {
         const siteName = movies[index]?.siteName?.trim();
-        if (siteName) {
-            return siteName;
-        }
+        if (siteName) return siteName;
     }
-
     return '';
 }
 
-// Open edit star modal
 function openEditStarModal() {
     document.getElementById('editStarName').value = currentStar.name;
     document.getElementById('editStarPictureUrl').value = currentStar.pictureUrl;
     editStarModal.classList.add('show');
 }
 
-// Close modal
 function closeMovieModalDialog() {
     addMovieModal.classList.remove('show');
     addMovieForm.reset();
     editingMovieIndex = null;
     document.getElementById('movieStars').value = '';
-    addMovieModal.querySelector('.modal-content h2').textContent = 'Add New Movie';
+    movieModalTitle.textContent = 'Add New Movie';
+    albumConfigPreview.hidden = true;
 }
 
 function closeEditStarModalDialog() {
@@ -1009,8 +951,8 @@ function closeEditStarModalDialog() {
     editStarForm.reset();
 }
 
-// Handle add movie — supports both normal and "format flow"
-async function handleAddMovie(e) {
+// ── Core: Handle Save Movie (unified) ──────────────────────────────────────
+async function handleSaveMovie(e) {
     e.preventDefault();
 
     const videoTitle = document.getElementById('movieTitle').value.trim();
@@ -1028,14 +970,31 @@ async function handleAddMovie(e) {
     const movieImages = movieImagesInput.value.trim();
     const starNames = getMovieStarNames(movieStarsInput.value);
 
-    if (!videoTitle) {
-        alert('Video Title is required!');
+    if (!videoTitle) { alert('Video Title is required!'); return; }
+    if (!siteName) { alert('Site Name is required!'); return; }
+
+    // ── Album processing ───────────────────────────────────────────────
+    const sourceHtml = albumSourceHtml.value;
+    const baseUrl = albumBaseUrl.value.trim();
+
+    let albumImagesString = '';
+    let hasAlbumConfig = false;
+
+    if (sourceHtml && baseUrl) {
+        const parsed = parseAlbumImages(sourceHtml, baseUrl);
+        if (parsed.length > 0) {
+            albumImagesString = parsed.join(',');
+            hasAlbumConfig = true;
+        }
+    } else if (sourceHtml && !baseUrl) {
+        alert('Target Base URL is required when Source HTML is provided.');
+        albumBaseUrl.focus();
         return;
     }
 
-    if (!siteName) {
-        alert('Site Name is required!');
-        return;
+    // If both empty but this is a movie edit, preserve existing albumImages
+    if (!sourceHtml && !baseUrl && isEditing && currentStar?.movies?.[editingMovieIndex]?.albumImages) {
+        albumImagesString = currentStar.movies[editingMovieIndex].albumImages;
     }
 
     const moviePayload = {
@@ -1045,6 +1004,8 @@ async function handleAddMovie(e) {
         videoUrl,
         previewVideoUrl,
         images: movieImages,
+        albumImages: albumImagesString,
+        favoriteImages: '',
         starNames: isEditing ? [currentStar.name] : starNames
     };
 
@@ -1055,25 +1016,16 @@ async function handleAddMovie(e) {
                 : `${API_URL}/stars/${currentStar.id}/movies`,
             {
                 method: isEditing ? 'PUT' : 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(moviePayload)
             }
         );
-
-        if (!response.ok) {
-            throw new Error('Server error');
-        }
-
+        if (!response.ok) throw new Error('Server error');
         await loadData();
     } catch (error) {
-        console.log('Server not running or update failed, saving to localStorage only...');
+        console.log('Server not running, saving to localStorage only...');
         if (isEditing) {
-            currentStar.movies[editingMovieIndex] = {
-                ...moviePayload,
-                starNames: [currentStar.name]
-            };
+            currentStar.movies[editingMovieIndex] = { ...moviePayload, starNames: [currentStar.name] };
         } else {
             applyMovieToLocalProfiles(moviePayload, starNames);
         }
@@ -1089,39 +1041,34 @@ async function handleAddMovie(e) {
         return;
     }
 
-    // If format flow: keep modal closed, set pendingMovieId, open format modal
-    if (isFormatFlow) {
-        const newMovie = currentStar.movies.find(m => String(m.id) === String(moviePayload.id));
-        if (newMovie) {
-            pendingMovieId = moviePayload.id;
-        } else if (currentStar.movies.length > 0) {
-            pendingMovieId = currentStar.movies[currentStar.movies.length - 1].id;
+    // ── Redirect to album page if we just created album images ──────────
+    if (hasAlbumConfig) {
+        // Find the movie we just saved
+        const savedMovie = currentStar.movies.find(m => String(m.id) === String(moviePayload.id));
+        let savedMovieIndex = -1;
+        if (savedMovie) {
+            savedMovieIndex = currentStar.movies.indexOf(savedMovie);
+        } else {
+            // Fallback: last movie
+            savedMovieIndex = currentStar.movies.length - 1;
         }
 
-        if (pendingMovieId) {
-            closeMovieModalDialog();
-            formatSourceHtml.value = '';
-            formatBaseUrl.value = '';
-            formatPreview.hidden = true;
-            formatResult.textContent = '';
-            formatImagesModal.classList.add('show');
-        } else {
-            alert('Movie was created but could not locate it for image formatting.');
-            isFormatFlow = false;
-            closeMovieModalDialog();
-            loadStarDetails(currentStar.id);
-        }
-    } else {
-        // Normal flow: close modal and refresh
         closeMovieModalDialog();
-        loadStarDetails(currentStar.id);
-        updateMovieCount();
-        populateMovieFilters();
-        applyMovieFilters();
+
+        if (savedMovieIndex >= 0) {
+            // Update local data before redirect
+            localStorage.setItem('starsData', JSON.stringify(starsData));
+            window.location.href = `album/album.html?starId=${currentStar.id}&movieIndex=${savedMovieIndex}`;
+            return;
+        }
     }
 
-    // Reset button text
-    addMovieForm.querySelector('.btn-submit').textContent = 'Add Movie';
+    // Normal flow: just refresh the view
+    closeMovieModalDialog();
+    loadStarDetails(currentStar.id);
+    updateMovieCount();
+    populateMovieFilters();
+    applyMovieFilters();
 }
 
 // Handle edit star
@@ -1131,14 +1078,8 @@ async function handleEditStar(e) {
     const name = document.getElementById('editStarName').value.trim();
     const pictureUrl = document.getElementById('editStarPictureUrl').value.trim();
 
-    if (!name) {
-        alert('Star name is required!');
-        return;
-    }
-    if (!pictureUrl) {
-        alert('Picture URL is required!');
-        return;
-    }
+    if (!name) { alert('Star name is required!'); return; }
+    if (!pictureUrl) { alert('Picture URL is required!'); return; }
 
     currentStar.name = name;
     currentStar.pictureUrl = pictureUrl;
@@ -1146,15 +1087,10 @@ async function handleEditStar(e) {
     try {
         const response = await fetch(`${API_URL}/stars/${currentStar.id}`, {
             method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json'
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ name, pictureUrl })
         });
-
-        if (!response.ok) {
-            throw new Error('Server error');
-        }
+        if (!response.ok) throw new Error('Server error');
     } catch (error) {
         console.log('Server not running or update failed, saving to localStorage only...');
     }
@@ -1171,14 +1107,29 @@ async function handleEditStar(e) {
 function editMovie(index) {
     editingMovieIndex = index;
     const movie = currentStar.movies[index];
+    movieModalTitle.textContent = 'Edit Movie';
     document.getElementById('movieTitle').value = movie.videoTitle;
     document.getElementById('siteName').value = movie.siteName;
     document.getElementById('videoUrl').value = movie.videoUrl || '';
     document.getElementById('previewVideoUrl').value = movie.previewVideoUrl || '';
     document.getElementById('movieImages').value = movie.images || '';
     document.getElementById('movieStars').value = currentStar.name;
-    addMovieModal.querySelector('.modal-content h2').textContent = 'Edit Movie';
-    openAddMovieModal();
+
+    // Pre-fill album config from existing albumImages if present
+    albumSourceHtml.value = '';
+    albumBaseUrl.value = '';
+    albumConfigPreview.hidden = true;
+    // Show the album section on edit if it had album images
+    if (movie.albumImages) {
+        albumConfigDetails.setAttribute('open', '');
+        // Show existing album image count as informational
+        const existingCount = splitCommaSeparated(movie.albumImages).length;
+        if (existingCount > 0) {
+            // We don't set the fields, but we show it as open so user knows album exists
+        }
+    }
+
+    addMovieModal.classList.add('show');
 }
 
 // Delete movie
@@ -1188,7 +1139,6 @@ async function deleteMovie(index) {
             const response = await fetch(`${API_URL}/stars/${currentStar.id}/movies/${index}`, {
                 method: 'DELETE'
             });
-
             if (response.ok) {
                 currentStar.movies.splice(index, 1);
                 saveData();
@@ -1200,32 +1150,25 @@ async function deleteMovie(index) {
             currentStar.movies.splice(index, 1);
             saveData();
         }
-
         updateMovieCount();
         populateMovieFilters();
         applyMovieFilters();
     }
 }
 
-// Save data to localStorage
 function saveData() {
     localStorage.setItem('starsData', JSON.stringify(starsData));
 }
 
 // Delete star
 async function deleteStar() {
-    if (!confirm(`Are you sure you want to delete "${currentStar.name}" and all their movies?`)) {
-        return;
-    }
+    if (!confirm(`Are you sure you want to delete "${currentStar.name}" and all their movies?`)) return;
 
     try {
         const response = await fetch(`${API_URL}/stars/${currentStar.id}`, {
             method: 'DELETE'
         });
-
-        if (!response.ok) {
-            throw new Error('Server error');
-        }
+        if (!response.ok) throw new Error('Server error');
     } catch (error) {
         console.log('Server not running or delete failed, updating localStorage only...');
     }
@@ -1235,130 +1178,6 @@ async function deleteStar() {
     window.location.href = 'index.html';
 }
 
-// Go back to home
 function goBack() {
     window.location.href = 'index.html';
-}
-
-// ── Format Image Functions ─────────────────────────────────────────────────
-
-// Open add movie modal in "format flow" mode — after submit, redirects to format modal
-function openAddMovieAndFormat() {
-    isFormatFlow = true;
-    openAddMovieModal();
-    addMovieForm.querySelector('.btn-submit').textContent = 'Add Movie & Format Images';
-}
-
-function closeFormatModalDialog() {
-    formatImagesModal.classList.remove('show');
-    formatImagesForm.reset();
-    formatPreview.hidden = true;
-    formatResult.textContent = '';
-    isFormatFlow = false;
-    pendingMovieId = null;
-}
-
-// Parse HTML from imx.to and extract image IDs from href attributes
-function parseFormatImages(sourceHtml, baseUrl) {
-    if (!sourceHtml || !baseUrl) return [];
-
-    const ids = [];
-    // Match href="https://imx.to/i/XXXXX" patterns
-    const regex = /href="https:\/\/imx\.to\/i\/([a-zA-Z0-9]+)"/g;
-    let match;
-
-    while ((match = regex.exec(sourceHtml)) !== null) {
-        const id = match[1];
-        // Build URL: baseUrl + id + .jpg
-        const baseNormalized = baseUrl.endsWith('/') ? baseUrl : baseUrl + '/';
-        ids.push(`${baseNormalized}${id}.jpg`);
-    }
-
-    return ids;
-}
-
-// Handle preview button click
-function handleFormatPreview() {
-    const sourceHtml = formatSourceHtml.value;
-    const baseUrl = formatBaseUrl.value.trim();
-
-    if (!sourceHtml) {
-        alert('Please paste the source HTML.');
-        return;
-    }
-
-    if (!baseUrl) {
-        alert('Please enter the base URL.');
-        return;
-    }
-
-    const urls = parseFormatImages(sourceHtml, baseUrl);
-
-    if (urls.length === 0) {
-        alert('No image IDs found in the HTML. Make sure it contains href="https://imx.to/i/XXXXX" patterns.');
-        formatPreview.hidden = true;
-        return;
-    }
-
-    formatCount.textContent = urls.length;
-    formatResult.textContent = urls.join(',\n');
-    formatPreview.hidden = false;
-}
-
-// Handle save button click — updates the pending movie's images field
-async function handleFormatSave(e) {
-    e.preventDefault();
-
-    if (!pendingMovieId) {
-        alert('No pending movie to save images to. Please add the movie first.');
-        return;
-    }
-
-    const sourceHtml = formatSourceHtml.value;
-    const baseUrl = formatBaseUrl.value.trim();
-
-    if (!sourceHtml || !baseUrl) {
-        alert('Please fill in both the source HTML and base URL fields.');
-        return;
-    }
-
-    const urls = parseFormatImages(sourceHtml, baseUrl);
-
-    if (urls.length === 0) {
-        alert('No image IDs found. Nothing to save.');
-        return;
-    }
-
-    const imagesString = urls.join(',');
-
-    // Find the movie in currentStar.movies
-    const movieIndex = currentStar.movies.findIndex(m => String(m.id) === String(pendingMovieId));
-    if (movieIndex === -1) {
-        alert('Could not find the pending movie. It may have been deleted.');
-        closeFormatModalDialog();
-        return;
-    }
-
-    // Update the movie's images field
-    currentStar.movies[movieIndex].images = imagesString;
-    saveData();
-
-    // Also try to update on the server
-    try {
-        await fetch(`${API_URL}/stars/${currentStar.id}/movies/${movieIndex}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(currentStar.movies[movieIndex])
-        });
-    } catch (_) {
-        // Server offline is fine — localStorage is already updated
-    }
-
-    closeFormatModalDialog();
-
-    // Reload data and refresh view
-    await loadData();
-    loadStarDetails(currentStar.id);
-
-    alert(`Formatted ${urls.length} images and saved to "${currentStar.movies[movieIndex]?.videoTitle || 'movie'}".`);
 }
