@@ -666,7 +666,7 @@ async function resolveThumbnail(movie) {
     return { type: 'placeholder' };
 }
 
-function createThumbnailHTML(movieIndex, resolved) {
+function createThumbnailHTML(movieIndex, resolved, previewUrl) {
     if (resolved.type === 'images') {
         const slidesHTML = resolved.urls.map((url, i) => `
             <div class="slide${i === 0 ? ' active' : ''}" style="opacity: ${i === 0 ? '1' : '0'};">
@@ -674,11 +674,19 @@ function createThumbnailHTML(movieIndex, resolved) {
             </div>
         `).join('');
 
+        const hasPreview = Boolean(previewUrl);
+        const videoHTML = hasPreview ? `
+            <video class="preview-video-element" muted loop playsinline preload="metadata">
+                <source src="${previewUrl}" type="video/mp4">
+            </video>
+        ` : '';
+
         return `
-            <div class="movie-thumbnail image-slideshow" data-movie-index="${movieIndex}" data-has-images="true" data-has-preview="false">
+            <div class="movie-thumbnail image-slideshow${hasPreview ? ' has-preview' : ''}" data-movie-index="${movieIndex}" data-has-images="true" data-has-preview="${hasPreview}">
                 <div class="slideshow-container">
                     ${slidesHTML}
                 </div>
+                ${videoHTML}
             </div>
         `;
     }
@@ -767,8 +775,10 @@ async function renderMovies() {
             </div>
         `;
 
+        // Pass rawPreviewUrl to createThumbnailHTML so it can embed the preview video
+        // inside the slideshow container when images are present
         movieCard.innerHTML = `
-            ${createThumbnailHTML(movieIndex, resolved)}
+            ${createThumbnailHTML(movieIndex, resolved, rawPreviewUrl)}
             <div class="movie-info">
                 <h4>${movie.videoTitle}</h4>
                 ${images.length > 0 ? `<p><strong>Images:</strong> ${images.length} image${images.length !== 1 ? 's' : ''}</p>` : '<p class="movie-info-placeholder">&nbsp;</p>'}
@@ -784,13 +794,13 @@ async function renderMovies() {
 
         const previewVideo = movieCard.querySelector('.preview-video-element');
         const hasImages = resolved.type === 'images';
-        const hasPreview = resolved.type === 'preview';
 
         if (previewVideo && !hasImages) {
             playPreviewVideo(previewVideo);
         }
 
-        if (previewVideo && hasImages) {
+        // When both images and preview exist, manage slideshow on hover
+        if (previewVideo && hasImages && rawPreviewUrl) {
             movieCard.addEventListener('mouseenter', () => {
                 stopSlideshow(movieIndex);
                 playPreviewVideo(previewVideo);
