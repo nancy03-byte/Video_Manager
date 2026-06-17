@@ -1,4 +1,3 @@
-// API Base URL
 // API Base URL (use relative path so deployed site calls its backend)
 const API_URL = '/api';
 
@@ -613,49 +612,92 @@ function resetMovieFilters() {
     applyMovieFilters();
 }
 
-function createThumbnail(movie, index) {
-    const images = splitCommaSeparated(movie.images);
-    const previewUrl = getSingleUrl(movie.previewVideoUrl);
-    const hasImages = images.length > 0;
-    const hasPreview = Boolean(previewUrl);
+// ── Thumbnail fallback chain ───────────────────────────────────────────────
+// Priority: images (skip broken) → preview video → star's profile picture → placeholder
 
-    if (hasImages) {
-        const slidesHTML = images.map((img, imgIndex) => `
-            <div class="slide ${imgIndex === 0 ? 'active' : ''}" style="opacity: ${imgIndex === 0 ? '1' : '0'};">
-                <img src="${img}" alt="Movie image ${imgIndex + 1}" onerror='this.src="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%27300%27 height=%27180%27%3E%3Crect fill=%27%23ddd%27 width=%27100%25%27 height=%27100%25%27/%3E%3Ctext x=%2750%25%27 y=%2750%25%27 text-anchor=%27middle%27 dy=%27.1em%27 fill=%27%23666%27 font-family=%27sans-serif%27 font-size=%2716%27%3EImage Not Found%3C/text%3E%3C/svg%3E"'>
+const PLACEHOLDER_SVG = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='180'%3E%3Crect fill='%23ddd' width='100%25' height='100%25'/%3E%3Ctext x='50%25' y='50%25' text-anchor='middle' dy='.1em' fill='%23666' font-family='sans-serif' font-size='16'%3ENo Preview%3C/text%3E%3C/svg%3E";
+
+function preloadImage(url) {
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => resolve(url);
+        img.onerror = () => resolve(null);
+        // Trigger the load
+        img.src = url;
+        // If already cached, onload may not fire; check after setting src
+        if (img.complete && img.naturalWidth > 0) {
+            resolve(url);
+        } else if (img.complete) {
+            resolve(null);
+        }
+    });
+}
+
+async function buildValidImages(imageUrls) {
+    const results = await Promise.all(imageUrls.map(preloadImage));
+    return results.filter(Boolean);
+}
+
+async function resolveThumbnail(movie) {
+    // 1. Try images — skip broken ones
+    const rawImages = splitCommaSeparated(movie.images);
+    if (rawImages.length > 0) {
+        const validImages = await buildValidImages(rawImages);
+        if (validImages.length > 0) {
+            return { type: 'images', urls: validImages };
+        }
+    }
+
+    // 2. All images failed or no images → use star's profile picture
+    if (currentStar?.pictureUrl) {
+        const valid = await preloadImage(currentStar.pictureUrl);
+        if (valid) {
+            return { type: 'profile', url: currentStar.pictureUrl };
+        }
+    }
+
+    // 3. Profile also failed → try preview video
+    const previewUrl = getSingleUrl(movie.previewVideoUrl);
+    if (previewUrl) {
+        return { type: 'preview', url: previewUrl };
+    }
+
+    // 4. Fallback placeholder
+    return { type: 'placeholder' };
+}
+
+function createThumbnailHTML(movieIndex, resolved) {
+    if (resolved.type === 'images') {
+        const slidesHTML = resolved.urls.map((url, i) => `
+            <div class="slide${i === 0 ? ' active' : ''}" style="opacity: ${i === 0 ? '1' : '0'};">
+                <img src="${url}" alt="Movie image ${i + 1}">
             </div>
         `).join('');
 
-        const previewVideoHTML = hasPreview ? `
-            <video class="preview-video-element" muted loop playsinline preload="metadata">
-                <source src="${previewUrl}" type="video/mp4">
-            </video>
-        ` : '';
-
         return `
-            <div class="movie-thumbnail image-slideshow${hasPreview ? ' has-preview' : ''}" data-movie-index="${index}" data-has-images="true" data-has-preview="${hasPreview}">
+            <div class="movie-thumbnail image-slideshow" data-movie-index="${movieIndex}" data-has-images="true" data-has-preview="false">
                 <div class="slideshow-container">
                     ${slidesHTML}
-                    ${previewVideoHTML}
                 </div>
             </div>
         `;
     }
 
-    if (hasPreview) {
+    if (resolved.type === 'preview') {
         return `
-            <div class="movie-thumbnail preview-video" data-movie-index="${index}" data-has-images="false" data-has-preview="true">
+            <div class="movie-thumbnail preview-video" data-movie-index="${movieIndex}" data-has-images="false" data-has-preview="true">
                 <video class="preview-video-element preview-video-autoplay" muted loop playsinline autoplay preload="metadata">
-                    <source src="${previewUrl}" type="video/mp4">
+                    <source src="${resolved.url}" type="video/mp4">
                 </video>
             </div>
         `;
     }
 
+    // profile or placeholder
+    const imgSrc = resolved.type === 'profile' ? resolved.url : PLACEHOLDER_SVG;
     return `
-        <div class="movie-thumbnail generic-video" data-movie-index="${index}" data-has-images="false" data-has-preview="false">
-            <div class="video-icon">▶</div>
-            <div class="video-text">No Preview</div>
+        <div class="movie-thumbnail generic-video" data-movie-index="${movieIndex}" data-has-images="false" data-has-preview="false">
+            <img src="${imgSrc}" alt="Thumbnail" style="width:100%;height:100%;object-fit:cover;">
         </div>
     `;
 }
@@ -677,7 +719,7 @@ function createSitePreviewButtonRow(siteButtonHTML, previewButtonHTML) {
     `;
 }
 
-function renderMovies() {
+async function renderMovies() {
     stopAllSlideshows();
     moviesGrid.innerHTML = '';
 
@@ -689,7 +731,8 @@ function renderMovies() {
         return;
     }
 
-    movies.forEach((movie, index) => {
+    // Build movie cards as document fragments for batch insertion
+    const cardPromises = movies.map(async (movie, index) => {
         const movieIndex = currentStar.movies.indexOf(movie);
         const movieCard = document.createElement('div');
         movieCard.className = 'movie-card';
@@ -698,11 +741,14 @@ function renderMovies() {
         const watchUrls = splitCommaSeparated(movie.videoUrl);
         const siteLink = getLinkValue(movie.siteName || '');
         const siteDomain = extractDomainName(movie.siteName || movie.siteNameLink || movie.siteUrl || '');
-        const previewUrl = getSingleUrl(movie.previewVideoUrl);
+        const rawPreviewUrl = getSingleUrl(movie.previewVideoUrl);
+
+        // Resolve thumbnail with fallback chain
+        const resolved = await resolveThumbnail(movie);
 
         const sitePreviewButtonsHTML = createSitePreviewButtonRow(
             `<button class="btn-site" data-open-url="${siteLink}">${siteDomain}</button>`,
-            previewUrl ? `<button class="btn-preview" data-open-url="${previewUrl}">Preview</button>` : ''
+            rawPreviewUrl ? `<button class="btn-preview" data-open-url="${rawPreviewUrl}">Preview</button>` : ''
         );
 
         const watchButtonsHTML = createFixedButtonRow(
@@ -721,7 +767,7 @@ function renderMovies() {
         `;
 
         movieCard.innerHTML = `
-            ${createThumbnail(movie, movieIndex)}
+            ${createThumbnailHTML(movieIndex, resolved)}
             <div class="movie-info">
                 <h4>${movie.videoTitle}</h4>
                 ${images.length > 0 ? `<p><strong>Images:</strong> ${images.length} image${images.length !== 1 ? 's' : ''}</p>` : '<p class="movie-info-placeholder">&nbsp;</p>'}
@@ -736,23 +782,22 @@ function renderMovies() {
         });
 
         const previewVideo = movieCard.querySelector('.preview-video-element');
-        if (previewVideo) {
-            const hasImages = images.length > 0;
-            if (!hasImages) {
-                playPreviewVideo(previewVideo);
-            }
+        const hasImages = resolved.type === 'images';
+        const hasPreview = resolved.type === 'preview';
+
+        if (previewVideo && !hasImages) {
+            playPreviewVideo(previewVideo);
+        }
+
+        if (previewVideo && hasImages) {
             movieCard.addEventListener('mouseenter', () => {
-                if (hasImages) {
-                    stopSlideshow(movieIndex);
-                    playPreviewVideo(previewVideo);
-                }
+                stopSlideshow(movieIndex);
+                playPreviewVideo(previewVideo);
             });
             movieCard.addEventListener('mouseleave', () => {
-                if (hasImages) {
-                    pausePreviewVideo(previewVideo);
-                    if (!areSlideshowsPaused) {
-                        startSlideshow(movieIndex);
-                    }
+                pausePreviewVideo(previewVideo);
+                if (!areSlideshowsPaused) {
+                    startSlideshow(movieIndex);
                 }
             });
         }
@@ -760,12 +805,15 @@ function renderMovies() {
         movieCard.querySelector('[data-edit-index]')?.addEventListener('click', () => editMovie(movieIndex));
         movieCard.querySelector('[data-delete-index]')?.addEventListener('click', () => deleteMovie(movieIndex));
 
-        if (images.length > 1) {
+        if (hasImages && resolved.urls.length > 1) {
             setTimeout(() => startSlideshow(movieIndex), 100);
         }
 
-        moviesGrid.appendChild(movieCard);
+        return movieCard;
     });
+
+    const cards = await Promise.all(cardPromises);
+    cards.forEach(card => moviesGrid.appendChild(card));
 }
 
 // Start auto-rotating slideshow
@@ -833,6 +881,7 @@ function toggleAllSlideshows() {
 }
 
 function updateSlideshowsButton(movies = filteredMovies) {
+    // We check original images length (pre-validation) for display
     const hasMultipleImageMovie = Array.isArray(movies)
         && movies.some(movie => splitCommaSeparated(movie.images).length > 1);
 
