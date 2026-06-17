@@ -13,6 +13,33 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(__dirname));
 
+// ── In-Memory Cache ──────────────────────────────────────────────────────
+const cache = {
+  stars: {
+    data: null,
+    timestamp: 0,
+    ttl: 60_000, // 60 seconds
+  },
+};
+
+function getCached(key) {
+  const entry = cache[key];
+  if (!entry.data) return null;
+  if (Date.now() - entry.timestamp > entry.ttl) return null; // expired
+  return entry.data;
+}
+
+function setCache(key, data) {
+  const entry = cache[key];
+  entry.data = data;
+  entry.timestamp = Date.now();
+}
+
+function invalidateCache(key) {
+  const entry = cache[key];
+  if (entry) entry.data = null;
+}
+
 // ── MongoDB Connection (non-blocking) ──────────────────────────────────────
 
 const MONGO_OPTIONS = {
@@ -107,7 +134,7 @@ function createMovieId() {
 async function findStarByName(name) {
   const targetKey = normalizeStarKey(name);
   if (!targetKey) return null;
-  const allStars = await Star.find();
+  const allStars = getCached('stars') || [];
   return allStars.find((star) => normalizeStarKey(star.name) === targetKey) || null;
 }
 
@@ -122,7 +149,9 @@ async function ensureStarByName(name) {
     pictureUrl: '',
     movies: [],
   });
-  return await newStar.save();
+  const saved = await newStar.save();
+  invalidateCache('stars');
+  return saved;
 }
 
 function isObjectIdString(value) {
@@ -173,7 +202,17 @@ app.get('/api/health', (_req, res) => {
 
 app.get('/api/stars', requireDB, async (_req, res) => {
   try {
-    const stars = await Star.find();
+    // Check cache first
+    const cached = getCached('stars');
+    if (cached) {
+      return res.json(cached);
+    }
+
+    const stars = await Star.find().lean();
+
+    // Update cache with the fresh data
+    setCache('stars', stars);
+
     res.json(stars);
   } catch (error) {
     console.error('Error reading stars:', error);
@@ -194,6 +233,7 @@ app.post('/api/stars', requireDB, async (req, res) => {
     });
 
     const savedStar = await newStar.save();
+    invalidateCache('stars');
     res.status(201).json(savedStar);
   } catch (error) {
     console.error('Error adding star:', error);
@@ -214,6 +254,7 @@ app.put('/api/stars/:starId', requireDB, async (req, res) => {
     star.name = name;
     star.pictureUrl = pictureUrl;
     const updatedStar = await star.save();
+    invalidateCache('stars');
     res.json(updatedStar);
   } catch (error) {
     console.error('Error updating star:', error);
@@ -223,7 +264,7 @@ app.put('/api/stars/:starId', requireDB, async (req, res) => {
 
 app.post('/api/stars/:starId/movies', requireDB, async (req, res) => {
   try {
-    const star = await getStarByParam(req.params.starId);
+    const star = await Star.findById(req.params.starId);
     if (!star) return res.status(404).json({ error: 'Star not found' });
 
     const videoTitle = normalizeStarName(req.body.videoTitle);
@@ -263,6 +304,7 @@ app.post('/api/stars/:starId/movies', requireDB, async (req, res) => {
     }
 
     const updatedStar = await star.save();
+    invalidateCache('stars');
     const primaryMovie = updatedStar.movies[updatedStar.movies.length - 1];
 
     res.status(201).json({ movie: primaryMovie, starsUpdated: starNames });
@@ -274,7 +316,7 @@ app.post('/api/stars/:starId/movies', requireDB, async (req, res) => {
 
 app.put('/api/stars/:starId/movies/:movieIndex', requireDB, async (req, res) => {
   try {
-    const star = await getStarByParam(req.params.starId);
+    const star = await Star.findById(req.params.starId);
     if (!star) return res.status(404).json({ error: 'Star not found' });
 
     const movieIndex = parseInt(req.params.movieIndex, 10);
@@ -301,6 +343,7 @@ app.put('/api/stars/:starId/movies/:movieIndex', requireDB, async (req, res) => 
 
     star.movies[movieIndex] = updatedMovie;
     const savedStar = await star.save();
+    invalidateCache('stars');
     res.json(savedStar.movies[movieIndex]);
   } catch (error) {
     console.error('Error updating movie:', error);
@@ -321,6 +364,7 @@ app.delete('/api/stars/:starId', requireDB, async (req, res) => {
 
     if (!star) return res.status(404).json({ error: 'Star not found' });
 
+    invalidateCache('stars');
     res.json({ success: true });
   } catch (error) {
     console.error('Error deleting star:', error);
@@ -330,7 +374,7 @@ app.delete('/api/stars/:starId', requireDB, async (req, res) => {
 
 app.delete('/api/stars/:starId/movies/:movieIndex', requireDB, async (req, res) => {
   try {
-    const star = await getStarByParam(req.params.starId);
+    const star = await Star.findById(req.params.starId);
     if (!star) return res.status(404).json({ error: 'Star not found' });
 
     const movieIndex = parseInt(req.params.movieIndex, 10);
@@ -340,6 +384,7 @@ app.delete('/api/stars/:starId/movies/:movieIndex', requireDB, async (req, res) 
 
     star.movies.splice(movieIndex, 1);
     await star.save();
+    invalidateCache('stars');
     res.json({ success: true });
   } catch (error) {
     console.error('Error deleting movie:', error);

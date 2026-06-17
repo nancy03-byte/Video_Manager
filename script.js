@@ -12,6 +12,34 @@ const closeAddModal = document.getElementById("closeAddModal");
 const addStarForm = document.getElementById("addStarForm");
 const resetFiltersBtn = document.getElementById("resetFiltersBtn");
 
+// ── Client-side Cache ────────────────────────────────────────────────────
+const DATA_CACHE = {
+  data: null,
+  timestamp: 0,
+  staleAge: 30_000, // 30 seconds
+};
+
+function getCachedData() {
+  if (DATA_CACHE.data && (Date.now() - DATA_CACHE.timestamp) < DATA_CACHE.staleAge) {
+    return DATA_CACHE.data;
+  }
+  return null;
+}
+
+function setCachedData(data) {
+  DATA_CACHE.data = data;
+  DATA_CACHE.timestamp = Date.now();
+}
+
+// ── Debounce utility ─────────────────────────────────────────────────────
+function debounce(fn, delay = 300) {
+  let timer;
+  return function (...args) {
+    clearTimeout(timer);
+    timer = setTimeout(() => fn.apply(this, args), delay);
+  };
+}
+
 // Global data
 let starsData = [];
 let filteredStars = [];
@@ -29,7 +57,7 @@ function setupEventListeners() {
     addStarBtn.addEventListener("click", openAddModal);
     closeAddModal.addEventListener("click", closeModal);
     addStarForm.addEventListener("submit", handleAddStar);
-    searchInput.addEventListener("input", applyFilters);
+    searchInput.addEventListener("input", debounce(applyFilters, 250));
     resetFiltersBtn.addEventListener("click", resetFilters);
 
     document.addEventListener("click", handleDocumentClick);
@@ -154,24 +182,41 @@ function closeDropdown(state) {
     state.button.setAttribute("aria-expanded", "false");
 }
 
-// Load data from JSON
+// Load data with stale-while-revalidate pattern
 async function loadData() {
+    // Try cache first for instant render
+    const cached = getCachedData();
+    if (cached) {
+        starsData = cached;
+        filteredStars = [...starsData];
+        populateFilters();
+        renderStars();
+        // Don't return — still fetch fresh data in background below
+    }
+
+    // Always try to fetch fresh data in background
     try {
         const response = await fetch(`${API_URL}/stars`);
         if (response.ok) {
             starsData = await response.json();
+            setCachedData(starsData);
             saveData();
-        } else {
+        } else if (!cached) {
             await loadFromLocalStorage();
         }
     } catch (error) {
         console.log("Server not running, loading from localStorage...");
-        await loadFromLocalStorage();
+        if (!cached) {
+            await loadFromLocalStorage();
+        }
     }
 
-    filteredStars = [...starsData];
-    populateFilters();
-    renderStars();
+    if (!cached) {
+        // First load — no cache was hit above, so render now
+        filteredStars = [...starsData];
+        populateFilters();
+        renderStars();
+    }
 }
 
 // Load from localStorage fallback
@@ -368,6 +413,7 @@ function renderStars() {
         return;
     }
 
+    const fragment = document.createDocumentFragment();
     filteredStars.forEach((star) => {
         const starCard = document.createElement("div");
         starCard.className = "star-card";
@@ -379,8 +425,9 @@ function renderStars() {
             </div>
         `;
         starCard.addEventListener("click", () => goToStarDetail(star.id));
-        starsGrid.appendChild(starCard);
+        fragment.appendChild(starCard);
     });
+    starsGrid.appendChild(fragment);
 }
 
 // Apply filters
@@ -447,6 +494,7 @@ async function handleAddStar(e) {
         if (response.ok) {
             const newStar = await response.json();
             starsData.push(newStar);
+            setCachedData(starsData);
             saveData();
         } else {
             throw new Error("Server error");
@@ -460,6 +508,7 @@ async function handleAddStar(e) {
             movies: []
         };
         starsData.push(newStar);
+        setCachedData(starsData);
         saveData();
     }
 

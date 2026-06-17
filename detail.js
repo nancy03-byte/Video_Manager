@@ -1,3 +1,31 @@
+// ── Shared Cache (same as script.js) ─────────────────────────────────────
+const DETAIL_CACHE = {
+  data: null,
+  timestamp: 0,
+  staleAge: 30_000,
+};
+
+function getDetailCached() {
+  if (DETAIL_CACHE.data && (Date.now() - DETAIL_CACHE.timestamp) < DETAIL_CACHE.staleAge) {
+    return DETAIL_CACHE.data;
+  }
+  return null;
+}
+
+function setDetailCache(data) {
+  DETAIL_CACHE.data = data;
+  DETAIL_CACHE.timestamp = Date.now();
+}
+
+function debounce(fn, delay) {
+  let timer;
+  return function (...args) {
+    clearTimeout(timer);
+    timer = setTimeout(() => fn.apply(this, args), delay);
+  };
+}
+// ──────────────────────────────────────────────────────────────────────────
+
 // API Base URL (use relative path so deployed site calls its backend)
 const API_URL = '/api';
 
@@ -59,7 +87,7 @@ function setupEventListeners() {
     document.getElementById('videoUrl').addEventListener('blur', (event) => addTrailingComma(event.target));
     document.getElementById('movieImages').addEventListener('keydown', handleCommaFieldEnter);
     document.getElementById('videoUrl').addEventListener('keydown', handleCommaFieldEnter);
-    movieSearchInput.addEventListener('input', applyMovieFilters);
+    movieSearchInput.addEventListener('input', debounce(applyMovieFilters, 250));
     movieSortSelect.addEventListener('change', applyMovieFilters);
     resetMovieFiltersBtn.addEventListener('click', resetMovieFilters);
     toggleSlideshowsBtn.addEventListener('click', toggleAllSlideshows);
@@ -612,58 +640,46 @@ function resetMovieFilters() {
     applyMovieFilters();
 }
 
-// ── Thumbnail fallback chain ───────────────────────────────────────────────
-// Priority: images (skip broken) → preview video → star's profile picture → placeholder
+// ── Thumbnail resolution ───────────────────────────────────────────────────
+// Synchronous — no preloading. Images render immediately with lazy loading.
+// Broken images fall back to star profile → preview video → placeholder via onerror.
 
 const PLACEHOLDER_SVG = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='180'%3E%3Crect fill='%23ddd' width='100%25' height='100%25'/%3E%3Ctext x='50%25' y='50%25' text-anchor='middle' dy='.1em' fill='%23666' font-family='sans-serif' font-size='16'%3ENo Preview%3C/text%3E%3C/svg%3E";
 
-function preloadImage(url) {
-    return new Promise((resolve) => {
-        const img = new Image();
-        img.onload = () => resolve(url);
-        img.onerror = () => resolve(null);
-        // Trigger the load
-        img.src = url;
-        // If already cached, onload may not fire; check after setting src
-        if (img.complete && img.naturalWidth > 0) {
-            resolve(url);
-        } else if (img.complete) {
-            resolve(null);
-        }
-    });
-}
+const THUMBNAIL_CACHE = new Map();
 
-async function buildValidImages(imageUrls) {
-    const results = await Promise.all(imageUrls.map(preloadImage));
-    return results.filter(Boolean);
-}
+function resolveThumbnail(movie) {
+    const cacheKey = movie.id;
+    const cached = THUMBNAIL_CACHE.get(cacheKey);
+    if (cached) return cached;
 
-async function resolveThumbnail(movie) {
-    // 1. Try images — skip broken ones
+    // 1. Try images
     const rawImages = splitCommaSeparated(movie.images);
     if (rawImages.length > 0) {
-        const validImages = await buildValidImages(rawImages);
-        if (validImages.length > 0) {
-            return { type: 'images', urls: validImages };
-        }
+        const result = { type: 'images', urls: rawImages };
+        THUMBNAIL_CACHE.set(cacheKey, result);
+        return result;
     }
 
-    // 2. All images failed or no images → use star's profile picture
-    if (currentStar?.pictureUrl) {
-        const valid = await preloadImage(currentStar.pictureUrl);
-        if (valid) {
-            return { type: 'profile', url: currentStar.pictureUrl };
-        }
-    }
-
-    // 3. Profile also failed → try preview video
+    // 2. Preview video
     const previewUrl = getSingleUrl(movie.previewVideoUrl);
     if (previewUrl) {
-        return { type: 'preview', url: previewUrl };
+        const result = { type: 'preview', url: previewUrl };
+        THUMBNAIL_CACHE.set(cacheKey, result);
+        return result;
+    }
+
+    // 3. Profile picture
+    if (currentStar?.pictureUrl) {
+        const result = { type: 'profile', url: currentStar.pictureUrl };
+        THUMBNAIL_CACHE.set(cacheKey, result);
+        return result;
     }
 
     // 4. Fallback placeholder
-    return { type: 'placeholder' };
+    const result = { type: 'placeholder' };
+    THUMBNAIL_CACHE.set(cacheKey, result);
+    return result;
 }
 
 function createThumbnailHTML(movieIndex, resolved, previewUrl) {

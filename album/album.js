@@ -4,6 +4,26 @@
 
 const API_URL = '/api';
 
+// ── Cache ─────────────────────────────────────────────────────────────────
+const ALBUM_CACHE = {
+  data: null,
+  timestamp: 0,
+  staleAge: 30_000,
+};
+
+function getAlbumCached() {
+  if (ALBUM_CACHE.data && (Date.now() - ALBUM_CACHE.timestamp) < ALBUM_CACHE.staleAge) {
+    return ALBUM_CACHE.data;
+  }
+  return null;
+}
+
+function setAlbumCache(data) {
+  ALBUM_CACHE.data = data;
+  ALBUM_CACHE.timestamp = Date.now();
+}
+// ──────────────────────────────────────────────────────────────────────────
+
 // DOM refs
 const albumGrid = document.getElementById('albumGrid');
 const albumTitle = document.getElementById('albumTitle');
@@ -80,18 +100,38 @@ document.addEventListener('DOMContentLoaded', async () => {
 // ── Data Loading ──────────────────────────────────────────────────────────
 
 async function loadStarsData() {
+    // Try in-memory cache first
+    const cached = getAlbumCached();
+    if (cached) return cached;
+
+    // Try localStorage next
+    const saved = localStorage.getItem('starsData');
+    if (saved) {
+        try {
+            const data = JSON.parse(saved);
+            setAlbumCache(data);
+            return data;
+        } catch (_) {}
+    }
+
+    // Fetch from server
     try {
         const res = await fetch(`${API_URL}/stars`);
-        if (res.ok) return await res.json();
+        if (res.ok) {
+            const data = await res.json();
+            setAlbumCache(data);
+            localStorage.setItem('starsData', JSON.stringify(data));
+            return data;
+        }
     } catch (_) { /* fall through */ }
 
-    const saved = localStorage.getItem('starsData');
-    if (saved) return JSON.parse(saved);
-
+    // Last resort: data.json
     try {
         const res = await fetch('../data.json');
         const data = await res.json();
-        return data.stars || [];
+        const stars = data.stars || [];
+        setAlbumCache(stars);
+        return stars;
     } catch (_) {
         return [];
     }
