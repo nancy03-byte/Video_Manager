@@ -904,7 +904,7 @@ function openAlbum(movieIndex) {
         alert('No album images available for this movie.');
         return;
     }
-    window.location.href = `album/album.html?starId=${currentStar.id}&movieIndex=${movieIndex}`;
+    window.open(`album/album.html?starId=${currentStar.id}&movieIndex=${movieIndex}`, '_blank');
 }
 
 function openInNewTab(url) {

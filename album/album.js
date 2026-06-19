@@ -69,6 +69,11 @@ const slideshowNext = document.getElementById('slideshowNext');
 const slideshowPlayPause = document.getElementById('slideshowPlayPause');
 const slideshowCounter = document.getElementById('slideshowCounter');
 
+// ── Favorites Strip DOM ──────────────────────────────────────────────────
+const favoritesStrip = document.getElementById('favoritesStrip');
+const favoritesStripItems = document.getElementById('favoritesStripItems');
+const favoritesStripCount = document.getElementById('favoritesStripCount');
+
 // ── Init ──────────────────────────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -311,7 +316,57 @@ function renderGrid() {
     addItem.addEventListener('click', () => addImage());
     albumGrid.appendChild(addItem);
 
+    renderFavoritesStrip();
     updateSlideshowButton();
+}
+
+// ── Favorites Strip Rendering ─────────────────────────────────────────────
+
+function renderFavoritesStrip() {
+    favoritesStripItems.innerHTML = '';
+
+    if (favoriteImages.length === 0) {
+        favoritesStrip.hidden = true;
+        return;
+    }
+
+    favoritesStrip.hidden = false;
+    favoritesStripCount.textContent = favoriteImages.length;
+
+    favoriteImages.forEach((url, idx) => {
+        const item = document.createElement('div');
+        item.className = 'favorites-strip-item';
+
+        const img = document.createElement('img');
+        img.src = url;
+        img.alt = `Favorite ${idx + 1}`;
+        img.loading = 'lazy';
+
+        // Click on the image opens the lightbox at the corresponding grid index
+        const gridIndex = images.indexOf(url);
+        item.addEventListener('click', () => {
+            if (gridIndex >= 0) openLightbox(gridIndex);
+        });
+
+        // Remove button
+        const removeBtn = document.createElement('button');
+        removeBtn.className = 'favorites-strip-remove';
+        removeBtn.innerHTML = '×';
+        removeBtn.title = 'Remove from favorites';
+        removeBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (gridIndex >= 0) {
+                const pos = favoriteImages.indexOf(url);
+                if (pos >= 0) favoriteImages.splice(pos, 1);
+                saveAlbumData();
+                renderGrid();
+            }
+        });
+
+        item.appendChild(img);
+        item.appendChild(removeBtn);
+        favoritesStripItems.appendChild(item);
+    });
 }
 
 // ── Favorite Toggle ───────────────────────────────────────────────────────
