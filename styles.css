@@ -571,7 +571,7 @@ body {
 
 .movie-thumbnail {
   width: 100%;
-  height: 180px;
+  height: 260px;
   background: #1e293b;
   display: flex;
   align-items: center;
@@ -800,6 +800,81 @@ body {
 }
 
 .action-buttons-row { margin-top: 6px; }
+
+/* Video + Album row — 2 video buttons + album button */
+.video-album-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: nowrap;
+  align-items: stretch;
+}
+
+.video-album-row .btn-watch,
+.video-album-row .btn-placeholder {
+  flex: 1;
+  min-width: 0;
+}
+
+.video-album-row .btn-album {
+  flex: 0 0 auto;
+  min-width: 80px;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.2s;
+  background: #faf5ff;
+  color: #7c3aed;
+}
+.video-album-row .btn-album:active { transform: scale(0.95); }
+.video-album-row .btn-album:hover { background: #f3e8ff; }
+.video-album-row .btn-album:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  background: #f1f5f9;
+  color: #94a3b8;
+}
+
+/* Edit + Delete row */
+.edit-delete-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: nowrap;
+  align-items: stretch;
+}
+
+.edit-delete-row .btn-edit,
+.edit-delete-row .btn-delete-movie {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 14px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: inline-block;
+}
+.edit-delete-row .btn-edit:active,
+.edit-delete-row .btn-delete-movie:active { transform: scale(0.95); }
+.edit-delete-row .btn-edit {
+  background: #fffbeb;
+  color: #d97706;
+}
+.edit-delete-row .btn-edit:hover { background: #fef3c7; }
+.edit-delete-row .btn-delete-movie {
+  background: #fef2f2;
+  color: #dc2626;
+}
+.edit-delete-row .btn-delete-movie:hover { background: #fee2e2; }
 
 .btn-placeholder {
   padding: 8px 12px;

@@ -742,32 +742,42 @@ async function renderMovies() {
         const movieCard = document.createElement('div');
         movieCard.className = 'movie-card';
 
-        const images = splitCommaSeparated(movie.images);
         const watchUrls = splitCommaSeparated(movie.videoUrl);
         const siteLink = getLinkValue(movie.siteName || '');
         const siteDomain = extractDomainName(movie.siteName || movie.siteNameLink || movie.siteUrl || '');
         const rawPreviewUrl = getSingleUrl(movie.previewVideoUrl);
         const resolved = await resolveThumbnail(movie);
 
-        const sitePreviewButtonsHTML = createSitePreviewButtonRow(
-            `<button class="btn-site" data-open-url="${siteLink}">${siteDomain}</button>`,
-            rawPreviewUrl ? `<button class="btn-preview" data-open-url="${rawPreviewUrl}">Preview</button>` : ''
-        );
-
-        const watchButtonsHTML = createFixedButtonRow(
-            'video-button-row',
-            watchUrls.length > 0
-                ? watchUrls.map(url => `<button class="btn-watch" data-open-url="${url}">Video</button>`).join('')
-                : '',
-            'Video'
-        );
-
-        // Check if movie has album images
+        // Album images from albumImages field, fallback to regular images
         const albumImages = splitCommaSeparated(movie.albumImages || movie.images);
-        const albumButtonDisabled = albumImages.length === 0;
-        const actionButtonsHTML = `
-            <div class="movie-buttons-row action-buttons-row fixed-row">
-                <button class="btn-album" data-album-index="${movieIndex}" ${albumButtonDisabled ? 'disabled' : ''}>${albumButtonDisabled ? 'No Album' : 'Album'}</button>
+
+        // Row 2: Site + Preview buttons
+        const sitePreviewHTML = `
+            <div class="movie-buttons-row site-preview-row">
+                <button class="btn-site" data-open-url="${siteLink}">${siteDomain}</button>
+                ${rawPreviewUrl ? `<button class="btn-preview" data-open-url="${rawPreviewUrl}">Preview</button>` : '<button class="btn-placeholder" disabled>Preview</button>'}
+            </div>
+        `;
+
+        // Row 3: Video buttons (max 2) + Album button with count
+        const videoButtonsHTML = watchUrls.length > 0
+            ? watchUrls.slice(0, 2).map(url => `<button class="btn-watch" data-open-url="${url}">Video</button>`).join('')
+            : '<button class="btn-placeholder" disabled>Video</button>';
+
+        const albumLabel = albumImages.length > 0
+            ? `Album (${albumImages.length})`
+            : 'No Album';
+
+        const actionsRowHTML = `
+            <div class="movie-buttons-row video-album-row">
+                ${videoButtonsHTML}
+                <button class="btn-album" data-album-index="${movieIndex}" ${albumImages.length === 0 ? 'disabled' : ''}>${albumLabel}</button>
+            </div>
+        `;
+
+        // Row 4: Edit + Delete
+        const editDeleteRowHTML = `
+            <div class="movie-buttons-row edit-delete-row">
                 <button class="btn-edit" data-edit-index="${movieIndex}">Edit</button>
                 <button class="btn-delete-movie" data-delete-index="${movieIndex}">Delete</button>
             </div>
@@ -777,11 +787,9 @@ async function renderMovies() {
             ${createThumbnailHTML(movieIndex, resolved, rawPreviewUrl)}
             <div class="movie-info">
                 <h4>${movie.videoTitle}</h4>
-                ${images.length > 0 ? `<p><strong>Images:</strong> ${images.length} image${images.length !== 1 ? 's' : ''}</p>` : '<p class="movie-info-placeholder">&nbsp;</p>'}
-                ${albumImages.length > 0 ? `<p class="album-badge">📸 Album: ${albumImages.length} image${albumImages.length !== 1 ? 's' : ''}</p>` : ''}
-                ${sitePreviewButtonsHTML}
-                ${watchButtonsHTML}
-                ${actionButtonsHTML}
+                ${sitePreviewHTML}
+                ${actionsRowHTML}
+                ${editDeleteRowHTML}
             </div>
         `;
 
