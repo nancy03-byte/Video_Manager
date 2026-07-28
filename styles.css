@@ -92,6 +92,26 @@ body {
 
 .btn:active { transform: scale(0.97); }
 
+.btn-blur-images {
+  background: linear-gradient(135deg, #f59e0b, #f97316);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.3);
+}
+
+.btn-blur-images:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(245, 158, 11, 0.4);
+}
+
+.btn-blur-images.is-active {
+  background: linear-gradient(135deg, #64748b, #334155);
+  box-shadow: 0 2px 8px rgba(100, 116, 139, 0.25);
+}
+
+body.images-blurred img {
+  filter: blur(48px) saturate(0.9);
+}
+
 .btn-add {
   background: linear-gradient(135deg, #6366f1, #8b5cf6);
   color: #fff;
@@ -801,24 +821,20 @@ body {
 
 .action-buttons-row { margin-top: 6px; }
 
-/* Video + Album row — 2 video buttons + album button */
+/* Video + Album row — all buttons equal width */
 .video-album-row {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: nowrap;
   align-items: stretch;
 }
 
 .video-album-row .btn-watch,
-.video-album-row .btn-placeholder {
-  flex: 1;
-  min-width: 0;
-}
-
+.video-album-row .btn-placeholder,
 .video-album-row .btn-album {
-  flex: 0 0 auto;
-  min-width: 80px;
-  padding: 8px 12px;
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 8px 8px;
   font-size: 12px;
   font-weight: 600;
   border: none;
@@ -826,16 +842,38 @@ body {
   cursor: pointer;
   font-family: inherit;
   transition: all 0.2s;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: inline-block;
+}
+.video-album-row .btn-watch:active,
+.video-album-row .btn-album:active { transform: scale(0.95); }
+.video-album-row .btn-watch {
+  background: #ecfdf5;
+  color: #059669;
+}
+.video-album-row .btn-watch:hover { background: #d1fae5; }
+.video-album-row .btn-album {
   background: #faf5ff;
   color: #7c3aed;
 }
-.video-album-row .btn-album:active { transform: scale(0.95); }
 .video-album-row .btn-album:hover { background: #f3e8ff; }
 .video-album-row .btn-album:disabled {
   opacity: 0.4;
   cursor: not-allowed;
   background: #f1f5f9;
   color: #94a3b8;
+}
+.video-album-row .btn-placeholder {
+  padding: 8px 8px;
+  border: 1.5px dashed #e2e8f0;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #94a3b8;
+  font-weight: 500;
+  font-size: 12px;
+  cursor: not-allowed;
 }
 
 /* Edit + Delete row */
@@ -1502,6 +1540,52 @@ body {
   font-size: 14px;
   font-weight: 600;
   color: #64748b;
+}
+
+/* ── Image Loading Indicators ──────────────────────────────────────────── */
+
+.album-img-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.album-loading,
+.album-error {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(2px);
+  z-index: 10;
+  transition: opacity 0.3s ease;
+}
+
+.album-error {
+  background: rgba(254, 242, 242, 0.95);
+}
+
+.loading-spinner {
+  font-size: 32px;
+  animation: spin 2s linear infinite;
+  display: inline-block;
+  color: #6366f1;
+}
+
+.error-icon {
+  font-size: 32px;
+  color: #dc2626;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════

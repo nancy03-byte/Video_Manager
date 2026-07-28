@@ -31,6 +31,9 @@ let starId = 0;
 let images = [];           // all album image URLs
 let favoriteImages = [];   // URLs flagged as favorites
 let starsData = [];
+let batchId = '';          // unique ID for this album (starId_movieIndex)
+let imageLoadingState = {}; // tracks {url: 'loading'|'cached'|'loaded'|'error'}
+let loadingProgress = { loaded: 0, total: 0 }; // loading progress
 
 // Slideshow state
 let slideshowTimer = null;
@@ -95,6 +98,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     movie = star.movies[movieIndex];
     albumTitle.textContent = `${movie.videoTitle || 'Album'} — Album`;
 
+    // Create unique batch ID for this album
+    batchId = `star_${starId}_movie_${movieIndex}`;
+
     // Load images from albumImages (fall back to images)
     const rawImages = splitCommaSeparated(movie.albumImages || movie.images || '');
     images = rawImages;
@@ -104,6 +110,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         albumGrid.innerHTML = '<div class="empty-state"><p>No images for this movie.</p></div>';
         return;
     }
+
+    // Initialize loading state for all images
+    images.forEach(url => {
+        imageLoadingState[url] = 'loading';
+    });
+    loadingProgress = { loaded: 0, total: images.length };
 
     // Restore column preference
     const savedCols = localStorage.getItem('albumColumns') || '4';
@@ -144,7 +156,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (e.target === lightbox) closeLightbox();
     });
 
+    // Render grid and start smart loading
     renderGrid();
+    startSmartImageLoading();
 });
 
 // ── Data Loading ──────────────────────────────────────────────────────────
@@ -231,14 +245,30 @@ function renderGrid() {
         const item = document.createElement('div');
         item.className = 'album-item';
         item.dataset.index = index;
+        item.dataset.url = url;
 
-        // Image
+        // Image container
+        const imgContainer = document.createElement('div');
+        imgContainer.className = 'album-img-container';
+
+        // Image (initially placeholder, will be replaced when loaded)
         const img = document.createElement('img');
-        img.src = url;
         img.alt = `Image ${index + 1}`;
         img.loading = 'lazy';
+        img.dataset.url = url;
+
+        // Loading indicator
+        const loadingIndicator = document.createElement('div');
+        loadingIndicator.className = 'album-loading';
+        loadingIndicator.innerHTML = '<span class=\"loading-spinner\">⟳</span>';
+
+        // Error indicator
+        const errorIndicator = document.createElement('div');
+        loadingIndicator.className = 'album-error';
+        errorIndicator.innerHTML = '<span class=\"error-icon\">⚠</span>';
 
         img.onload = () => {
+            loadingIndicator.remove();
             if (img.naturalWidth > img.naturalHeight) {
                 item.classList.add('item-landscape');
             } else if (img.naturalHeight > img.naturalWidth) {
@@ -247,6 +277,13 @@ function renderGrid() {
                 item.classList.add('item-square');
             }
         };
+
+        img.onerror = () => {
+            loadingIndicator.innerHTML = '<span class="error-icon">⚠</span>';
+        };
+
+        imgContainer.appendChild(img);
+        imgContainer.appendChild(loadingIndicator);
 
         // Click on item itself opens lightbox
         item.onclick = (e) => {
@@ -299,7 +336,7 @@ function renderGrid() {
         idxLabel.textContent = `${index + 1}`;
         overlay.appendChild(idxLabel);
 
-        item.appendChild(img);
+        item.appendChild(imgContainer);
         item.appendChild(overlay);
         albumGrid.appendChild(item);
     });
@@ -587,4 +624,77 @@ function handleKeydown(e) {
         if (e.key === 'ArrowLeft') { showPrevLightbox(); return; }
         if (e.key === 'ArrowRight') { showNextLightbox(); return; }
     }
+}
+
+// ── Smart Image Loading ───────────────────────────────────────────────────
+
+/**
+ * Initialize smart loading: favorites first, then others sequentially
+ * Images are cached in IndexedDB for offline access
+ */
+async function startSmartImageLoading() {
+    if (!loadImagesSmartly || images.length === 0) return;
+
+    await loadImagesSmartly(images, favoriteImages, batchId, {
+        onFavoriteLoaded: ({ url, blob, cached }) => {
+            updateImageElement(url, blob);
+        },
+        onImageLoaded: ({ url, blob, cached }) => {
+            updateImageElement(url, blob);
+        },
+        onProgress: ({ loaded, total, isFavorite }) => {
+            updateLoadingProgress(loaded, total, isFavorite);
+        },
+        onError: ({ url, error }) => {
+            markImageError(url);
+        }
+    });
+}
+
+/**
+ * Update an image element with blob or URL
+ */
+function updateImageElement(url, blob) {
+    const img = albumGrid.querySelector(`img[data-url="${url}"]`);
+    if (!img) return;
+
+    if (blob) {
+        // Use blob URL for cached images
+        const objectUrl = URL.createObjectURL(blob);
+        img.src = objectUrl;
+    } else {
+        // Fall back to direct URL
+        img.src = url;
+    }
+
+    imageLoadingState[url] = 'loaded';
+    
+    // Remove loading indicator
+    const loadingEl = img.parentElement.querySelector('.album-loading');
+    if (loadingEl) loadingEl.remove();
+}
+
+/**
+ * Mark image as error
+ */
+function markImageError(url) {
+    const img = albumGrid.querySelector(`img[data-url="${url}"]`);
+    if (!img) return;
+
+    imageLoadingState[url] = 'error';
+    
+    const loadingEl = img.parentElement.querySelector('.album-loading');
+    if (loadingEl) {
+        loadingEl.innerHTML = '<span class=\"error-icon\">⚠</span>';
+        loadingEl.classList.add('error');
+    }
+}
+
+/**
+ * Update loading progress (optional UI indicator)
+ */
+function updateLoadingProgress(loaded, total, isFavorite) {
+    loadingProgress = { loaded, total };
+    // You can add a progress bar here in the header if desired
+    // console.log(`Loading: ${loaded}/${total} (${isFavorite ? 'favorite' : 'other'})`);
 }
