@@ -249,6 +249,38 @@ function extractImageUrlsFromHtml(html) {
     return urls;
 }
 
+function normalizeOriginalCandidate(url) {
+    if (!url) return null;
+    if (url.includes('vipr')) {
+        return url.replace('/th/', '/i/');
+    }
+    if (url.includes('imx')) {
+        return url.replace('/t/', '/i/');
+    }
+    return url;
+}
+
+async function resolveOriginalImageUrl(pageUrl) {
+    const normalized = normalizeOriginalCandidate(pageUrl);
+    if (!normalized) return null;
+
+    try {
+        const response = await fetch(`/api/proxy?url=${encodeURIComponent(pageUrl)}`);
+        if (!response.ok) return normalized;
+        const html = await response.text();
+        const urls = extractImageUrlsFromHtml(html);
+        for (const url of urls) {
+            const candidate = normalizeOriginalCandidate(url);
+            if (candidate) {
+                return candidate;
+            }
+        }
+        return normalized;
+    } catch (_) {
+        return normalized;
+    }
+}
+
 function isWebpageEntry(entry) {
     return typeof entry === 'string' && entry.startsWith('webpage:');
 }
@@ -345,7 +377,7 @@ function renderGrid() {
         // Click on item itself opens lightbox
         item.onclick = (e) => {
             // Only open lightbox if not clicking a button in the overlay
-            if (!e.target.closest('.album-fav-btn') && !e.target.closest('.album-del-btn') && !e.target.closest('.album-upload-btn')) {
+            if (!e.target.closest('.album-fav-btn') && !e.target.closest('.album-del-btn') && !e.target.closest('.album-upload-btn') && !e.target.closest('.album-original-btn')) {
                 openLightbox(index);
             }
         };
@@ -353,6 +385,21 @@ function renderGrid() {
         // Overlay with actions
         const overlay = document.createElement('div');
         overlay.className = 'album-item-overlay';
+
+        // Original image button
+        const originalBtn = document.createElement('button');
+        originalBtn.className = 'album-original-btn';
+        originalBtn.innerHTML = '🔎';
+        originalBtn.title = 'View original image';
+        originalBtn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            const originalUrl = await resolveOriginalImageUrl(url);
+            if (originalUrl) {
+                mediaEl.src = originalUrl;
+                mediaEl.alt = 'Original image';
+            }
+        });
+        overlay.appendChild(originalBtn);
 
         // Favorite toggle
         const favBtn = document.createElement('button');

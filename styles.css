@@ -1434,7 +1434,8 @@ body.blur-active iframe {
   border-radius: 14px;
 }
 
-.album-item:hover .album-item-overlay {
+.album-item:hover .album-item-overlay,
+.album-item-overlay:hover {
   opacity: 1;
   pointer-events: auto;
 }
@@ -1466,6 +1467,15 @@ body.blur-active iframe {
 
 .album-upload-btn { color: #6366f1; }
 .album-upload-btn:hover { background: #eef2ff; }
+
+.album-original-btn {
+  color: #0f766e;
+  background: rgba(255, 255, 255, 0.95);
+}
+.album-original-btn:hover {
+  background: #ecfeff;
+  color: #115e59;
+}
 
 .album-idx-label {
   position: absolute;

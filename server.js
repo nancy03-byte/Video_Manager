@@ -200,6 +200,30 @@ app.get('/api/health', (_req, res) => {
   });
 });
 
+app.get('/api/proxy', async (req, res) => {
+  const targetUrl = req.query.url;
+  if (!targetUrl) {
+    return res.status(400).json({ error: 'Missing url parameter' });
+  }
+
+  try {
+    const response = await fetch(targetUrl);
+    const contentType = response.headers.get('content-type') || '';
+    if (contentType.startsWith('image/')) {
+      const buffer = Buffer.from(await response.arrayBuffer());
+      res.set('Content-Type', contentType);
+      return res.send(buffer);
+    }
+
+    const text = await response.text();
+    res.set('Content-Type', 'text/plain; charset=utf-8');
+    return res.send(text);
+  } catch (error) {
+    console.error('Proxy fetch failed:', error.message);
+    return res.status(502).json({ error: 'Failed to fetch target URL' });
+  }
+});
+
 // ── API Endpoints ──────────────────────────────────────────────────────────
 
 app.get('/api/stars', requireDB, async (_req, res) => {
