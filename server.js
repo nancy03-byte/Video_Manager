@@ -1,54 +1,60 @@
-const dotenv = require('dotenv');
-const path = require('path');
-
-const envPath = path.join(__dirname, 'config.env');
-const loadedEnv = dotenv.config({ path: envPath });
-if (loadedEnv.error) {
-  dotenv.config();
-}
+require('dotenv').config();
 
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
-const admin = require('firebase-admin');
+const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/star-library';
+const MONGODB_URI =
+  process.env.MONGODB_URI || 'mongodb://localhost:27017/star-library';
 
 // Middleware
 app.use(cors());
 app.use(express.json());
 app.use(express.static(__dirname));
 
-// ── In-Memory Cache ──────────────────────────────────────────────────────
+/* -------------------------------------------------------------------------- */
+/*                                    Cache                                   */
+/* -------------------------------------------------------------------------- */
+
 const cache = {
   stars: {
     data: null,
     timestamp: 0,
-    ttl: 60_000, // 60 seconds
+    ttl: 60000,
   },
 };
 
 function getCached(key) {
   const entry = cache[key];
-  if (!entry.data) return null;
-  if (Date.now() - entry.timestamp > entry.ttl) return null; // expired
+  if (!entry || !entry.data) return null;
+
+  if (Date.now() - entry.timestamp > entry.ttl) {
+    entry.data = null;
+    return null;
+  }
+
   return entry.data;
 }
 
 function setCache(key, data) {
-  const entry = cache[key];
-  entry.data = data;
-  entry.timestamp = Date.now();
+  if (!cache[key]) return;
+
+  cache[key].data = data;
+  cache[key].timestamp = Date.now();
 }
 
 function invalidateCache(key) {
-  const entry = cache[key];
-  if (entry) entry.data = null;
+  if (cache[key]) {
+    cache[key].data = null;
+  }
 }
 
-// ── MongoDB Connection (non-blocking) ──────────────────────────────────────
+/* -------------------------------------------------------------------------- */
+/*                              MongoDB Connection                            */
+/* -------------------------------------------------------------------------- */
 
 const MONGO_OPTIONS = {
   serverSelectionTimeoutMS: 5000,
@@ -57,8 +63,6 @@ const MONGO_OPTIONS = {
 };
 
 let mongoConnected = false;
-let firebaseConnected = false;
-let firebaseDb = null;
 
 function connectMongo() {
   mongoose
@@ -70,129 +74,10 @@ function connectMongo() {
     .catch((err) => {
       mongoConnected = false;
       console.error('MongoDB connection error:', err.message);
-      console.log('App will run in offline mode — API calls will return fallback data');
+      console.log(
+        'App will run in offline mode — API calls will return fallback data'
+      );
     });
-}
-
-function isFirebaseConfigured() {
-  return Boolean(
-    process.env.FIREBASE_SERVICE_ACCOUNT_JSON ||
-    process.env.FIREBASE_CREDENTIALS_PATH ||
-    process.env.FIREBASE_PROJECT_ID ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS ||
-    process.env.STORAGE_MODE === 'firebase'
-  );
-}
-
-function initFirebase() {
-  if (!isFirebaseConfigured()) return;
-  if (firebaseDb) return;
-
-  try {
-    if (admin.apps.length === 0) {
-      const projectId = process.env.FIREBASE_PROJECT_ID;
-      const credentialsPath = process.env.FIREBASE_CREDENTIALS_PATH;
-      const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
-
-      if (serviceAccountJson) {
-        const parsed = JSON.parse(serviceAccountJson);
-        admin.initializeApp({
-          credential: admin.credential.cert(parsed),
-          projectId: projectId || parsed.project_id,
-        });
-      } else if (credentialsPath) {
-        admin.initializeApp({
-          credential: admin.credential.cert(path.resolve(credentialsPath)),
-          projectId,
-        });
-      } else {
-        admin.initializeApp({
-          credential: admin.credential.applicationDefault(),
-          projectId,
-        });
-      }
-    }
-
-    firebaseDb = admin.firestore();
-    firebaseConnected = true;
-    console.log('Connected to Firestore');
-  } catch (error) {
-    firebaseConnected = false;
-    console.error('Firebase connection error:', error.message);
-    console.log('Falling back to MongoDB');
-  }
-}
-
-function getStorageMode() {
-  return firebaseConnected ? 'firebase' : 'mongo';
-}
-
-function toStorageStar(star) {
-  if (!star) return null;
-  const normalized = { ...star };
-  if (typeof normalized.id !== 'undefined' && normalized.id !== null) {
-    normalized.id = Number(normalized.id) || normalized.id;
-  }
-  return normalized;
-}
-
-async function getStarsFromStorage() {
-  if (firebaseConnected && firebaseDb) {
-    const snapshot = await firebaseDb.collection('stars').get();
-    return snapshot.docs.map((doc) => toStorageStar({ ...doc.data(), id: doc.id }));
-  }
-
-  const stars = await Star.find().lean();
-  return stars.map((star) => toStorageStar(star));
-}
-
-async function getStarByParamInStorage(param) {
-  if (firebaseConnected && firebaseDb) {
-    const asNumber = Number(param);
-    if (!Number.isNaN(asNumber)) {
-      const snapshot = await firebaseDb.collection('stars').where('id', '==', asNumber).limit(1).get();
-      if (!snapshot.empty) {
-        const [doc] = snapshot.docs;
-        return toStorageStar({ ...doc.data(), id: doc.data().id || doc.id });
-      }
-    }
-
-    const doc = await firebaseDb.collection('stars').doc(String(param)).get();
-    if (doc.exists) {
-      return toStorageStar({ ...doc.data(), id: doc.data().id || doc.id });
-    }
-    return null;
-  }
-
-  if (isObjectIdString(param)) return await Star.findById(param);
-  const asNumber = Number(param);
-  if (!Number.isNaN(asNumber)) return await Star.findOne({ id: asNumber });
-  return await Star.findOne({ id: param });
-}
-
-async function saveStarInStorage(star) {
-  if (firebaseConnected && firebaseDb) {
-    const normalizedStar = toStorageStar(star);
-    await firebaseDb.collection('stars').doc(String(normalizedStar.id)).set(normalizedStar);
-    return normalizedStar;
-  }
-
-  return await star.save();
-}
-
-async function deleteStarInStorage(starId) {
-  if (firebaseConnected && firebaseDb) {
-    await firebaseDb.collection('stars').doc(String(starId)).delete();
-    return true;
-  }
-
-  if (isObjectIdString(starId)) {
-    await Star.findByIdAndDelete(starId);
-  } else {
-    const asNumber = Number(starId);
-    await Star.findOneAndDelete({ id: asNumber });
-  }
-  return true;
 }
 
 mongoose.connection.on('disconnected', () => {
@@ -205,10 +90,11 @@ mongoose.connection.on('reconnected', () => {
   console.log('MongoDB reconnected');
 });
 
-initFirebase();
 connectMongo();
 
-// ── Define Schemas ─────────────────────────────────────────────────────────
+/* -------------------------------------------------------------------------- */
+/*                                   Schemas                                  */
+/* -------------------------------------------------------------------------- */
 
 const movieSchema = new mongoose.Schema({
   id: { type: Number, required: true },
@@ -231,7 +117,9 @@ const starSchema = new mongoose.Schema({
 
 const Star = mongoose.model('Star', starSchema);
 
-// ── Helper Functions ───────────────────────────────────────────────────────
+/* -------------------------------------------------------------------------- */
+/*                               Helper Functions                             */
+/* -------------------------------------------------------------------------- */
 
 function normalizeStarName(name) {
   return String(name || '').trim();
@@ -245,6 +133,7 @@ function splitCommaSeparated(value) {
   if (Array.isArray(value)) {
     return value.map(normalizeStarName).filter(Boolean);
   }
+
   return String(value || '')
     .split(',')
     .map(normalizeStarName)
@@ -253,9 +142,12 @@ function splitCommaSeparated(value) {
 
 function uniqueByNormalizedName(names) {
   const seen = new Set();
+
   return names.filter((name) => {
     const key = normalizeStarKey(name);
+
     if (!key || seen.has(key)) return false;
+
     seen.add(key);
     return true;
   });
@@ -268,57 +160,81 @@ function createMovieId() {
 async function findStarByName(name) {
   const targetKey = normalizeStarKey(name);
   if (!targetKey) return null;
-  const allStars = getCached('stars') || (await getStarsFromStorage());
-  return allStars.find((star) => normalizeStarKey(star.name) === targetKey) || null;
+
+  const allStars = getCached('stars') || (await Star.find().lean());
+
+  return (
+    allStars.find((star) => normalizeStarKey(star.name) === targetKey) || null
+  );
 }
 
 async function ensureStarByName(name) {
   const normalizedName = normalizeStarName(name);
+
   if (!normalizedName) return null;
+
   const existingStar = await findStarByName(normalizedName);
+
   if (existingStar) return existingStar;
 
-  const newStarData = {
+  const newStar = new Star({
     id: Date.now() + Math.floor(Math.random() * 1000000),
     name: normalizedName,
     pictureUrl: '',
     movies: [],
-  };
+  });
 
-  const saved = await saveStarInStorage(newStarData);
+  const saved = await newStar.save();
   invalidateCache('stars');
+
   return saved;
 }
 
 function isObjectIdString(value) {
-  return typeof value === 'string' && /^[0-9a-fA-F]{24}$/.test(value);
+  return (
+    typeof value === 'string' &&
+    /^[0-9a-fA-F]{24}$/.test(value)
+  );
 }
 
 async function getStarByParam(param) {
-  return await getStarByParamInStorage(param);
+  if (isObjectIdString(param)) {
+    return await Star.findById(param);
+  }
+
+  const asNumber = Number(param);
+
+  if (!Number.isNaN(asNumber)) {
+    return await Star.findOne({ id: asNumber });
+  }
+
+  return await Star.findOne({ id: param });
 }
 
-// ── Middleware: DB connectivity guard ───────────────────────────────────────
+/* -------------------------------------------------------------------------- */
+/*                              Database Middleware                           */
+/* -------------------------------------------------------------------------- */
 
 function requireDB(req, res, next) {
-  if (!mongoConnected && !firebaseConnected) {
+  if (!mongoConnected) {
     return res.status(503).json({
       error: 'Database not connected',
       message:
         'The server is starting up or the database is unavailable. Try again in a few seconds.',
     });
   }
+
   next();
 }
 
-// ── Health Check (must respond fast, no DB needed) ─────────────────────────
+/* -------------------------------------------------------------------------- */
+/*                               Health Endpoints                             */
+/* -------------------------------------------------------------------------- */
 
 app.get('/health', (_req, res) => {
   res.json({
-    status: mongoConnected || firebaseConnected ? 'ok' : 'degraded',
+    status: mongoConnected ? 'ok' : 'degraded',
     mongo: mongoConnected ? 'connected' : 'disconnected',
-    firebase: firebaseConnected ? 'connected' : 'disconnected',
-    storage: getStorageMode(),
     uptime: process.uptime(),
     timestamp: Date.now(),
   });
@@ -326,50 +242,29 @@ app.get('/health', (_req, res) => {
 
 app.get('/api/health', (_req, res) => {
   res.json({
-    status: mongoConnected || firebaseConnected ? 'ok' : 'degraded',
+    status: mongoConnected ? 'ok' : 'degraded',
     mongo: mongoConnected ? 'connected' : 'disconnected',
-    firebase: firebaseConnected ? 'connected' : 'disconnected',
-    storage: getStorageMode(),
     uptime: process.uptime(),
     timestamp: Date.now(),
   });
 });
+  /* -------------------------------------------------------------------------- */
+/*                               API Endpoints                                */
+/* -------------------------------------------------------------------------- */
 
-app.get('/api/proxy', async (req, res) => {
-  const targetUrl = req.query.url;
-  if (!targetUrl) {
-    return res.status(400).json({ error: 'Missing url parameter' });
-  }
-
-  try {
-    const response = await fetch(targetUrl);
-    const contentType = response.headers.get('content-type') || '';
-    if (contentType.startsWith('image/')) {
-      const buffer = Buffer.from(await response.arrayBuffer());
-      res.set('Content-Type', contentType);
-      return res.send(buffer);
-    }
-
-    const text = await response.text();
-    res.set('Content-Type', 'text/plain; charset=utf-8');
-    return res.send(text);
-  } catch (error) {
-    console.error('Proxy fetch failed:', error.message);
-    return res.status(502).json({ error: 'Failed to fetch target URL' });
-  }
-});
-
-// ── API Endpoints ──────────────────────────────────────────────────────────
-
+// Get all stars
 app.get('/api/stars', requireDB, async (_req, res) => {
   try {
     const cached = getCached('stars');
+
     if (cached) {
       return res.json(cached);
     }
 
-    const stars = await getStarsFromStorage();
+    const stars = await Star.find().lean();
+
     setCache('stars', stars);
+
     res.json(stars);
   } catch (error) {
     console.error('Error reading stars:', error);
@@ -377,67 +272,145 @@ app.get('/api/stars', requireDB, async (_req, res) => {
   }
 });
 
+// Add star
 app.post('/api/stars', requireDB, async (req, res) => {
   try {
     const name = normalizeStarName(req.body.name);
-    if (!name) return res.status(400).json({ error: 'Star name is required' });
 
-    const newStarData = {
+    if (!name) {
+      return res.status(400).json({
+        error: 'Star name is required',
+      });
+    }
+
+    const newStar = new Star({
       id: Date.now() + Math.floor(Math.random() * 1000000),
       name,
       pictureUrl: normalizeStarName(req.body.pictureUrl) || '',
       movies: [],
-    };
+    });
 
-    const savedStar = await saveStarInStorage(newStarData);
+    const savedStar = await newStar.save();
+
     invalidateCache('stars');
+
     res.status(201).json(savedStar);
   } catch (error) {
     console.error('Error adding star:', error);
-    res.status(500).json({ error: 'Failed to add star' });
+    res.status(500).json({
+      error: 'Failed to add star',
+    });
   }
 });
 
+// Update star
 app.put('/api/stars/:starId', requireDB, async (req, res) => {
   try {
     const star = await getStarByParam(req.params.starId);
-    if (!star) return res.status(404).json({ error: 'Star not found' });
+
+    if (!star) {
+      return res.status(404).json({
+        error: 'Star not found',
+      });
+    }
 
     const name = normalizeStarName(req.body.name);
     const pictureUrl = normalizeStarName(req.body.pictureUrl);
-    if (!name) return res.status(400).json({ error: 'Star name is required' });
-    if (!pictureUrl) return res.status(400).json({ error: 'Picture URL is required' });
+
+    if (!name) {
+      return res.status(400).json({
+        error: 'Star name is required',
+      });
+    }
+
+    if (!pictureUrl) {
+      return res.status(400).json({
+        error: 'Picture URL is required',
+      });
+    }
 
     star.name = name;
     star.pictureUrl = pictureUrl;
-    const updatedStar = await saveStarInStorage(star);
+
+    const updatedStar = await star.save();
+
     invalidateCache('stars');
+
     res.json(updatedStar);
   } catch (error) {
     console.error('Error updating star:', error);
-    res.status(500).json({ error: 'Failed to update star' });
+    res.status(500).json({
+      error: 'Failed to update star',
+    });
   }
 });
 
+// Delete star
+app.delete('/api/stars/:starId', requireDB, async (req, res) => {
+  try {
+    const param = req.params.starId;
+
+    let star;
+
+    if (isObjectIdString(param)) {
+      star = await Star.findByIdAndDelete(param);
+    } else {
+      const asNumber = Number(param);
+      star = await Star.findOneAndDelete({
+        id: asNumber,
+      });
+    }
+
+    if (!star) {
+      return res.status(404).json({
+        error: 'Star not found',
+      });
+    }
+
+    invalidateCache('stars');
+
+    res.json({
+      success: true,
+    });
+  } catch (error) {
+    console.error('Error deleting star:', error);
+    res.status(500).json({
+      error: 'Failed to delete star',
+    });
+  }
+});
+
+// Add movie
 app.post('/api/stars/:starId/movies', requireDB, async (req, res) => {
   try {
     const star = await getStarByParam(req.params.starId);
-    if (!star) return res.status(404).json({ error: 'Star not found' });
+
+    if (!star) {
+      return res.status(404).json({
+        error: 'Star not found',
+      });
+    }
 
     const videoTitle = normalizeStarName(req.body.videoTitle);
     const siteName = normalizeStarName(req.body.siteName);
+
     if (!videoTitle || !siteName) {
-      return res.status(400).json({ error: 'Video title and site name are required' });
+      return res.status(400).json({
+        error: 'Video title and site name are required',
+      });
     }
 
     const starNames = uniqueByNormalizedName([
       star.name,
-      ...splitCommaSeparated(req.body.starNames || req.body.movieStars || req.body.stars),
+      ...splitCommaSeparated(
+        req.body.starNames ||
+        req.body.movieStars ||
+        req.body.stars
+      ),
     ]);
 
-    const movieId = req.body.id || createMovieId();
     const moviePayload = {
-      id: movieId,
+      id: req.body.id || createMovieId(),
       videoTitle,
       siteName,
       videoUrl: req.body.videoUrl || '',
@@ -448,155 +421,259 @@ app.post('/api/stars/:starId/movies', requireDB, async (req, res) => {
       starNames: [star.name],
     };
 
+    // Add movie to primary star
     star.movies.push(moviePayload);
 
-    const otherStarNames = starNames.filter(
-      (name) => normalizeStarKey(name) !== normalizeStarKey(star.name)
+    // Duplicate to every selected co-star
+    const otherStars = starNames.filter(
+      (name) =>
+        normalizeStarKey(name) !==
+        normalizeStarKey(star.name)
     );
-    for (const starName of otherStarNames) {
-      const otherStar = await ensureStarByName(starName);
-      if (otherStar) {
-        const movieCopy = { ...moviePayload, id: createMovieId(), starNames: [otherStar.name] };
-        otherStar.movies.push(movieCopy);
-        await saveStarInStorage(otherStar);
-      }
+
+    for (const name of otherStars) {
+      const otherStar = await ensureStarByName(name);
+
+      if (!otherStar) continue;
+
+      otherStar.movies.push({
+        ...moviePayload,
+        id: createMovieId(),
+        starNames: [otherStar.name],
+      });
+
+      await otherStar.save();
     }
 
-    const updatedStar = await saveStarInStorage(star);
-    invalidateCache('stars');
-    const primaryMovie = updatedStar.movies[updatedStar.movies.length - 1];
+    const savedStar = await star.save();
 
-    res.status(201).json({ movie: primaryMovie, starsUpdated: starNames });
+    invalidateCache('stars');
+
+    res.status(201).json({
+      movie: savedStar.movies[savedStar.movies.length - 1],
+      starsUpdated: starNames,
+    });
+
   } catch (error) {
     console.error('Error adding movie:', error);
-    res.status(500).json({ error: 'Failed to add movie' });
+
+    res.status(500).json({
+      error: 'Failed to add movie',
+    });
   }
 });
+
+/* -------------------------------------------------------------------------- */
+/*                              Update Movie                                  */
+/* -------------------------------------------------------------------------- */
 
 app.put('/api/stars/:starId/movies/:movieIndex', requireDB, async (req, res) => {
   try {
     const star = await getStarByParam(req.params.starId);
-    if (!star) return res.status(404).json({ error: 'Star not found' });
+
+    if (!star) {
+      return res.status(404).json({
+        error: 'Star not found',
+      });
+    }
 
     const movieIndex = parseInt(req.params.movieIndex, 10);
-    if (Number.isNaN(movieIndex) || movieIndex < 0 || movieIndex >= star.movies.length) {
-      return res.status(404).json({ error: 'Movie not found' });
+
+    if (
+      Number.isNaN(movieIndex) ||
+      movieIndex < 0 ||
+      movieIndex >= star.movies.length
+    ) {
+      return res.status(404).json({
+        error: 'Movie not found',
+      });
     }
 
     const videoTitle = normalizeStarName(req.body.videoTitle);
     const siteName = normalizeStarName(req.body.siteName);
+
     if (!videoTitle || !siteName) {
-      return res.status(400).json({ error: 'Video title and site name are required' });
+      return res.status(400).json({
+        error: 'Video title and site name are required',
+      });
     }
 
-    const movieId = star.movies[movieIndex].id || req.body.id || createMovieId();
-    const updatedMovie = {
+    const movieId =
+      star.movies[movieIndex].id ||
+      req.body.id ||
+      createMovieId();
+
+    star.movies[movieIndex] = {
       id: movieId,
       videoTitle,
       siteName,
       videoUrl: req.body.videoUrl || '',
       previewVideoUrl: req.body.previewVideoUrl || '',
       images: req.body.images || '',
-      albumImages: req.body.albumImages !== undefined ? String(req.body.albumImages) : (star.movies[movieIndex].albumImages || ''),
-      favoriteImages: req.body.favoriteImages !== undefined ? String(req.body.favoriteImages) : (star.movies[movieIndex].favoriteImages || ''),
+      albumImages:
+        req.body.albumImages !== undefined
+          ? String(req.body.albumImages)
+          : star.movies[movieIndex].albumImages || '',
+      favoriteImages:
+        req.body.favoriteImages !== undefined
+          ? String(req.body.favoriteImages)
+          : star.movies[movieIndex].favoriteImages || '',
       starNames: [star.name],
     };
 
-    star.movies[movieIndex] = updatedMovie;
-    const savedStar = await saveStarInStorage(star);
+    const savedStar = await star.save();
+
     invalidateCache('stars');
+
     res.json(savedStar.movies[movieIndex]);
   } catch (error) {
     console.error('Error updating movie:', error);
-    res.status(500).json({ error: 'Failed to update movie' });
+
+    res.status(500).json({
+      error: 'Failed to update movie',
+    });
   }
 });
 
-app.delete('/api/stars/:starId', requireDB, async (req, res) => {
-  try {
-    const star = await getStarByParam(req.params.starId);
-    if (!star) return res.status(404).json({ error: 'Star not found' });
+/* -------------------------------------------------------------------------- */
+/*                              Album Endpoints                               */
+/* -------------------------------------------------------------------------- */
 
-    await deleteStarInStorage(req.params.starId);
-    invalidateCache('stars');
-    res.json({ success: true });
-  } catch (error) {
-    console.error('Error deleting star:', error);
-    res.status(500).json({ error: 'Failed to delete star' });
+app.patch(
+  '/api/stars/:starId/movies/:movieIndex/album',
+  requireDB,
+  async (req, res) => {
+    try {
+      const star = await getStarByParam(req.params.starId);
+
+      if (!star) {
+        return res.status(404).json({
+          error: 'Star not found',
+        });
+      }
+
+      const movieIndex = parseInt(req.params.movieIndex, 10);
+
+      if (
+        Number.isNaN(movieIndex) ||
+        movieIndex < 0 ||
+        movieIndex >= star.movies.length
+      ) {
+        return res.status(404).json({
+          error: 'Movie not found',
+        });
+      }
+
+      const movie = star.movies[movieIndex];
+
+      if (req.body.albumImages !== undefined) {
+        movie.albumImages = String(req.body.albumImages);
+      }
+
+      if (req.body.favoriteImages !== undefined) {
+        movie.favoriteImages = String(req.body.favoriteImages);
+      }
+
+      await star.save();
+
+      invalidateCache('stars');
+
+      res.json({
+        albumImages: movie.albumImages,
+        favoriteImages: movie.favoriteImages,
+      });
+
+    } catch (error) {
+      console.error('Error updating album:', error);
+
+      res.status(500).json({
+        error: 'Failed to update album',
+      });
+    }
   }
-});
+);
 
-// ── Album endpoints ───────────────────────────────────────────────────────
+/* -------------------------------------------------------------------------- */
+/*                              Delete Movie                                  */
+/* -------------------------------------------------------------------------- */
 
-app.patch('/api/stars/:starId/movies/:movieIndex/album', requireDB, async (req, res) => {
-  try {
-    const star = await getStarByParam(req.params.starId);
-    if (!star) return res.status(404).json({ error: 'Star not found' });
+app.delete(
+  '/api/stars/:starId/movies/:movieIndex',
+  requireDB,
+  async (req, res) => {
+    try {
+      const star = await getStarByParam(req.params.starId);
 
-    const movieIndex = parseInt(req.params.movieIndex, 10);
-    if (Number.isNaN(movieIndex) || movieIndex < 0 || movieIndex >= star.movies.length) {
-      return res.status(404).json({ error: 'Movie not found' });
+      if (!star) {
+        return res.status(404).json({
+          error: 'Star not found',
+        });
+      }
+
+      const movieIndex = parseInt(req.params.movieIndex, 10);
+
+      if (
+        Number.isNaN(movieIndex) ||
+        movieIndex < 0 ||
+        movieIndex >= star.movies.length
+      ) {
+        return res.status(404).json({
+          error: 'Movie not found',
+        });
+      }
+
+      star.movies.splice(movieIndex, 1);
+
+      await star.save();
+
+      invalidateCache('stars');
+
+      res.json({
+        success: true,
+      });
+
+    } catch (error) {
+      console.error('Error deleting movie:', error);
+
+      res.status(500).json({
+        error: 'Failed to delete movie',
+      });
     }
-
-    const movie = star.movies[movieIndex];
-
-    if (req.body.albumImages !== undefined) {
-      movie.albumImages = String(req.body.albumImages);
-    }
-    if (req.body.favoriteImages !== undefined) {
-      movie.favoriteImages = String(req.body.favoriteImages);
-    }
-
-    const savedStar = await saveStarInStorage(star);
-    invalidateCache('stars');
-    res.json({ albumImages: movie.albumImages, favoriteImages: movie.favoriteImages });
-  } catch (error) {
-    console.error('Error updating album:', error);
-    res.status(500).json({ error: 'Failed to update album' });
   }
-});
-
-app.delete('/api/stars/:starId/movies/:movieIndex', requireDB, async (req, res) => {
-  try {
-    const star = await getStarByParam(req.params.starId);
-    if (!star) return res.status(404).json({ error: 'Star not found' });
-
-    const movieIndex = parseInt(req.params.movieIndex, 10);
-    if (Number.isNaN(movieIndex) || movieIndex < 0 || movieIndex >= star.movies.length) {
-      return res.status(404).json({ error: 'Movie not found' });
-    }
-
-    star.movies.splice(movieIndex, 1);
-    await saveStarInStorage(star);
-    invalidateCache('stars');
-    res.json({ success: true });
-  } catch (error) {
-    console.error('Error deleting movie:', error);
-    res.status(500).json({ error: 'Failed to delete movie' });
-  }
-});
-
-// ── SPA fallback: serve index.html for unmatched non-API routes ────────────
+);
+/* -------------------------------------------------------------------------- */
+/*                              SPA Fallback                                  */
+/* -------------------------------------------------------------------------- */
 
 app.get('*', (req, res) => {
-  // Don't serve index.html for API routes (they'd return HTML instead of JSON)
+  // Don't return index.html for API routes
   if (req.path.startsWith('/api/')) {
-    return res.status(404).json({ error: 'Not found' });
+    return res.status(404).json({
+      error: 'Not found',
+    });
   }
+
   res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// ── Global error handler ───────────────────────────────────────────────────
+/* -------------------------------------------------------------------------- */
+/*                           Global Error Handler                             */
+/* -------------------------------------------------------------------------- */
 
-app.use((err, _req, res, _next) => {
+app.use((err, req, res, next) => {
   console.error('Unhandled error:', err);
+
   res.status(500).json({
     error: 'Internal server error',
-    ...(process.env.NODE_ENV !== 'production' && { detail: err.message }),
+    ...(process.env.NODE_ENV !== 'production'
+      ? { detail: err.message }
+      : {}),
   });
 });
 
-// ── Start server ───────────────────────────────────────────────────────────
+/* -------------------------------------------------------------------------- */
+/*                               Start Server                                 */
+/* -------------------------------------------------------------------------- */
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running at http://0.0.0.0:${PORT}`);

@@ -6,21 +6,21 @@ const API_URL = '/api';
 
 // ── Cache ─────────────────────────────────────────────────────────────────
 const ALBUM_CACHE = {
-  data: null,
-  timestamp: 0,
-  staleAge: 30_000,
+    data: null,
+    timestamp: 0,
+    staleAge: 30_000,
 };
 
 function getAlbumCached() {
-  if (ALBUM_CACHE.data && (Date.now() - ALBUM_CACHE.timestamp) < ALBUM_CACHE.staleAge) {
-    return ALBUM_CACHE.data;
-  }
-  return null;
+    if (ALBUM_CACHE.data && (Date.now() - ALBUM_CACHE.timestamp) < ALBUM_CACHE.staleAge) {
+        return ALBUM_CACHE.data;
+    }
+    return null;
 }
 
 function setAlbumCache(data) {
-  ALBUM_CACHE.data = data;
-  ALBUM_CACHE.timestamp = Date.now();
+    ALBUM_CACHE.data = data;
+    ALBUM_CACHE.timestamp = Date.now();
 }
 
 // ── State ─────────────────────────────────────────────────────────────────
@@ -32,6 +32,15 @@ let images = [];           // all album image URLs
 let favoriteImages = [];   // URLs flagged as favorites
 let starsData = [];
 let albumControlsBound = false;
+
+// Smart loading state
+let imageLoadingState = {};
+let loadingProgress = {
+    loaded: 0,
+    total: 0
+};
+
+let batchId = '';
 
 // Slideshow state
 let slideshowTimer = null;
@@ -206,7 +215,7 @@ async function loadData() {
             setAlbumCache(starsData);
             star = starsData.find(s => s.id === starId);
             if (star) return;
-        } catch (_) {}
+        } catch (_) { }
     }
 
     try {
@@ -218,7 +227,7 @@ async function loadData() {
             star = starsData.find(s => s.id === starId);
             return;
         }
-    } catch (_) {}
+    } catch (_) { }
 
     try {
         const res = await fetch('../data.json');
@@ -396,13 +405,35 @@ function renderGrid() {
                 }
             };
         }
+        // Loading indicator
+        const loadingIndicator = document.createElement('div');
+        loadingIndicator.className = 'album-loading';
+        loadingIndicator.textContent = 'Loading...';
 
-        img.onerror = () => {
-            loadingIndicator.innerHTML = '<span class="error-icon">⚠</span>';
-        };
+        if (!isWebpage) {
+            mediaEl.dataset.url = url;
 
-        imgContainer.appendChild(img);
+            mediaEl.onerror = () => {
+                loadingIndicator.innerHTML =
+                    '<span class="error-icon">⚠</span>';
+            };
+
+            mediaEl.onload = () => {
+                loadingIndicator.remove();
+
+                if (mediaEl.naturalWidth > mediaEl.naturalHeight) {
+                    item.classList.add('item-landscape');
+                } else if (mediaEl.naturalHeight > mediaEl.naturalWidth) {
+                    item.classList.add('item-portrait');
+                } else {
+                    item.classList.add('item-square');
+                }
+            };
+        }
+
+        imgContainer.appendChild(mediaEl);
         imgContainer.appendChild(loadingIndicator);
+
 
         // Click on item itself opens lightbox
         item.onclick = (e) => {
@@ -466,7 +497,7 @@ function renderGrid() {
         idxLabel.textContent = `${index + 1}`;
         overlay.appendChild(idxLabel);
 
-        item.appendChild(mediaEl);
+        item.appendChild(imgContainer);
         item.appendChild(overlay);
         albumGrid.appendChild(item);
     });
@@ -890,7 +921,7 @@ function updateImageElement(url, blob) {
     }
 
     imageLoadingState[url] = 'loaded';
-    
+
     // Remove loading indicator
     const loadingEl = img.parentElement.querySelector('.album-loading');
     if (loadingEl) loadingEl.remove();
@@ -904,7 +935,7 @@ function markImageError(url) {
     if (!img) return;
 
     imageLoadingState[url] = 'error';
-    
+
     const loadingEl = img.parentElement.querySelector('.album-loading');
     if (loadingEl) {
         loadingEl.innerHTML = '<span class=\"error-icon\">⚠</span>';
