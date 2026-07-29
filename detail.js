@@ -30,6 +30,7 @@ const API_URL = '/api';
 
 // DOM Elements
 const backBtn = document.getElementById('backBtn');
+const blurToggleBtn = document.getElementById('blurToggleBtn');
 const addMovieBtn = document.getElementById('addMovieBtn');
 const editStarBtn = document.getElementById('editStarBtn');
 const deleteStarBtn = document.getElementById('deleteStarBtn');
@@ -75,12 +76,29 @@ document.addEventListener('DOMContentLoaded', async () => {
     const params = new URLSearchParams(window.location.search);
     const starId = parseInt(params.get('starId'));
 
+    initBlurToggle();
     setupMovieFilterDropdown();
     setupMovieColumns();
     await loadData();
     loadStarDetails(starId);
     setupEventListeners();
 });
+
+function initBlurToggle() {
+    const savedState = localStorage.getItem('blurMode') === 'on';
+    applyBlur(savedState);
+    blurToggleBtn?.addEventListener('click', () => {
+        applyBlur(!document.body.classList.contains('blur-active'));
+    });
+}
+
+function applyBlur(enabled) {
+    document.body.classList.toggle('blur-active', enabled);
+    if (blurToggleBtn) {
+        blurToggleBtn.textContent = enabled ? 'Blur On' : 'Blur Off';
+    }
+    localStorage.setItem('blurMode', enabled ? 'on' : 'off');
+}
 
 function setupEventListeners() {
     backBtn.addEventListener('click', goBack);
@@ -766,12 +784,12 @@ async function renderMovies() {
 
         const albumLabel = albumImages.length > 0
             ? `Album (${albumImages.length})`
-            : 'No Album';
+            : 'Open Album';
 
         const actionsRowHTML = `
             <div class="movie-buttons-row video-album-row">
                 ${videoButtonsHTML}
-                <button class="btn-album" data-album-index="${movieIndex}" ${albumImages.length === 0 ? 'disabled' : ''}>${albumLabel}</button>
+                <button class="btn-album" data-album-index="${movieIndex}">${albumLabel}</button>
             </div>
         `;
 
@@ -907,11 +925,6 @@ function pausePreviewVideo(videoElement) {
 function openAlbum(movieIndex) {
     const movie = currentStar.movies[movieIndex];
     if (!movie) return;
-    const albumImages = splitCommaSeparated(movie.albumImages || movie.images);
-    if (albumImages.length === 0) {
-        alert('No album images available for this movie.');
-        return;
-    }
     window.open(`album/album.html?starId=${currentStar.id}&movieIndex=${movieIndex}`, '_blank');
 }
 
