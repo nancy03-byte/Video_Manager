@@ -31,6 +31,7 @@ let starId = 0;
 let images = [];           // all album image URLs
 let favoriteImages = [];   // URLs flagged as favorites
 let starsData = [];
+let albumControlsBound = false;
 
 // Slideshow state
 let slideshowTimer = null;
@@ -44,10 +45,17 @@ const albumBackBtn = document.getElementById('albumBackBtn');
 const albumColumnsSelect = document.getElementById('albumColumnsSelect');
 const albumSlideshowBtn = document.getElementById('albumSlideshowBtn');
 const editRawUrlsBtn = document.getElementById('editRawUrlsBtn');
+const blurToggleBtn = document.getElementById('blurToggleBtn');
+const addWebpageBtn = document.getElementById('addWebpageBtn');
+const addWebpageModal = document.getElementById('addWebpageModal');
+const closeWebpageModal = document.getElementById('closeWebpageModal');
+const addWebpageForm = document.getElementById('addWebpageForm');
+const webpageLinksInput = document.getElementById('webpageLinksInput');
 
 // Lightbox
 const lightbox = document.getElementById('albumLightbox');
 const lightboxImage = document.getElementById('lightboxImage');
+const lightboxFrame = document.getElementById('lightboxFrame');
 const lightboxClose = document.getElementById('lightboxClose');
 const lightboxPrev = document.getElementById('lightboxPrev');
 const lightboxNext = document.getElementById('lightboxNext');
@@ -78,6 +86,7 @@ const favoritesStripCount = document.getElementById('favoritesStripCount');
 
 document.addEventListener('DOMContentLoaded', async () => {
     const params = new URLSearchParams(window.location.search);
+    initBlurToggle();
     starId = Number(params.get('starId'));
     movieIndex = Number(params.get('movieIndex'));
 
@@ -97,8 +106,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Load images from albumImages (fall back to images)
     const rawImages = splitCommaSeparated(movie.albumImages || movie.images || '');
-    images = rawImages;
+    images = rawImages.map(normalizeAlbumEntry).filter(Boolean);
     favoriteImages = splitCommaSeparated(movie.favoriteImages || '');
+
+    bindAlbumControls();
 
     if (images.length === 0) {
         albumGrid.innerHTML = '<div class="empty-state"><p>No images for this movie.</p></div>';
@@ -120,7 +131,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         window.location.href = `../detail.html?starId=${starId}`;
     });
 
-    // Edit raw URLs
+    renderGrid();
+});
+
+function bindAlbumControls() {
+    if (albumControlsBound) return;
+
     editRawUrlsBtn.addEventListener('click', openEditRawModal);
     closeRawModal.addEventListener('click', () => editRawModal.classList.remove('show'));
     editRawForm.addEventListener('submit', handleEditRawSave);
@@ -128,7 +144,16 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (e.target === editRawModal) editRawModal.classList.remove('show');
     });
 
-    // Slideshow
+    addWebpageBtn.addEventListener('click', () => {
+        webpageLinksInput.value = '';
+        addWebpageModal.classList.add('show');
+    });
+    closeWebpageModal.addEventListener('click', () => addWebpageModal.classList.remove('show'));
+    addWebpageForm.addEventListener('submit', handleAddWebpageLinks);
+    window.addEventListener('click', (e) => {
+        if (e.target === addWebpageModal) addWebpageModal.classList.remove('show');
+    });
+
     albumSlideshowBtn.addEventListener('click', launchSlideshow);
     slideshowClose.addEventListener('click', closeSlideshow);
     slideshowPrev.addEventListener('click', slideshowGoPrev);
@@ -136,7 +161,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     slideshowPlayPause.addEventListener('click', toggleSlideshowPlay);
     document.addEventListener('keydown', handleKeydown);
 
-    // Lightbox
     lightboxClose.addEventListener('click', closeLightbox);
     lightboxPrev.addEventListener('click', showPrevLightbox);
     lightboxNext.addEventListener('click', showNextLightbox);
@@ -144,8 +168,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (e.target === lightbox) closeLightbox();
     });
 
-    renderGrid();
-});
+    albumControlsBound = true;
+}
 
 // ── Data Loading ──────────────────────────────────────────────────────────
 
@@ -189,9 +213,68 @@ async function loadData() {
     }
 }
 
+function initBlurToggle() {
+    const savedState = localStorage.getItem('blurMode') === 'on';
+    applyBlur(savedState);
+    blurToggleBtn?.addEventListener('click', () => {
+        applyBlur(!document.body.classList.contains('blur-active'));
+    });
+}
+
+function applyBlur(enabled) {
+    document.body.classList.toggle('blur-active', enabled);
+    if (blurToggleBtn) {
+        blurToggleBtn.textContent = enabled ? 'Blur On' : 'Blur Off';
+    }
+    localStorage.setItem('blurMode', enabled ? 'on' : 'off');
+}
+
 function splitCommaSeparated(value) {
     if (!value) return [];
-    return value.split(',').map(s => s.trim()).filter(Boolean);
+    return String(value)
+        .split(/[\n,]+/)
+        .map(s => s.trim())
+        .filter(Boolean);
+}
+
+function extractImageUrlsFromHtml(html) {
+    if (!html) return [];
+    const urls = [];
+    const regex = /<img[^>]+src=["']([^"']+)["'][^>]*>/gi;
+    let match;
+    while ((match = regex.exec(html)) !== null) {
+        const src = match[1].trim();
+        if (src) urls.push(src);
+    }
+    return urls;
+}
+
+function isWebpageEntry(entry) {
+    return typeof entry === 'string' && entry.startsWith('webpage:');
+}
+
+function getEntryValue(entry) {
+    if (isWebpageEntry(entry)) {
+        return entry.replace(/^webpage:/, '');
+    }
+    return entry;
+}
+
+function normalizeAlbumEntry(value) {
+    const trimmed = String(value || '').trim();
+    if (!trimmed) return null;
+    if (trimmed.startsWith('webpage:')) return trimmed;
+
+    if (trimmed.includes('<a') && trimmed.includes('<img')) {
+        return extractImageUrlsFromHtml(trimmed).map((src) => src.trim()).filter(Boolean);
+    }
+
+    const isLikelyWebpage = /^https?:\/\//i.test(trimmed) && !/\.(?:jpe?g|png|gif|webp|avif|bmp|svg)(?:[?#].*)?$/i.test(trimmed);
+    return isLikelyWebpage ? `webpage:${trimmed}` : trimmed;
+}
+
+function formatAlbumEntryForInput(entry) {
+    return getEntryValue(entry);
 }
 
 // ── Persistence ───────────────────────────────────────────────────────────
@@ -226,27 +309,38 @@ async function saveAlbumData() {
 function renderGrid() {
     albumGrid.innerHTML = '';
 
-    images.forEach((url, index) => {
-        const isFavorite = favoriteImages.includes(url);
+    images.forEach((entry, index) => {
+        const url = getEntryValue(entry);
+        const isFavorite = favoriteImages.includes(entry);
+        const isWebpage = isWebpageEntry(entry);
         const item = document.createElement('div');
-        item.className = 'album-item';
+        item.className = `album-item${isWebpage ? ' album-webpage-item' : ''}`;
         item.dataset.index = index;
 
-        // Image
-        const img = document.createElement('img');
-        img.src = url;
-        img.alt = `Image ${index + 1}`;
-        img.loading = 'lazy';
+        let mediaEl = null;
 
-        img.onload = () => {
-            if (img.naturalWidth > img.naturalHeight) {
-                item.classList.add('item-landscape');
-            } else if (img.naturalHeight > img.naturalWidth) {
-                item.classList.add('item-portrait');
-            } else {
-                item.classList.add('item-square');
-            }
-        };
+        if (isWebpage) {
+            mediaEl = document.createElement('iframe');
+            mediaEl.src = url;
+            mediaEl.title = `Webpage ${index + 1}`;
+            mediaEl.loading = 'lazy';
+            mediaEl.setAttribute('referrerpolicy', 'no-referrer');
+        } else {
+            mediaEl = document.createElement('img');
+            mediaEl.src = url;
+            mediaEl.alt = `Image ${index + 1}`;
+            mediaEl.loading = 'lazy';
+
+            mediaEl.onload = () => {
+                if (mediaEl.naturalWidth > mediaEl.naturalHeight) {
+                    item.classList.add('item-landscape');
+                } else if (mediaEl.naturalHeight > mediaEl.naturalWidth) {
+                    item.classList.add('item-portrait');
+                } else {
+                    item.classList.add('item-square');
+                }
+            };
+        }
 
         // Click on item itself opens lightbox
         item.onclick = (e) => {
@@ -299,7 +393,7 @@ function renderGrid() {
         idxLabel.textContent = `${index + 1}`;
         overlay.appendChild(idxLabel);
 
-        item.appendChild(img);
+        item.appendChild(mediaEl);
         item.appendChild(overlay);
         albumGrid.appendChild(item);
     });
@@ -322,6 +416,23 @@ function renderGrid() {
 
 // ── Favorites Strip Rendering ─────────────────────────────────────────────
 
+function handleAddWebpageLinks(e) {
+    e.preventDefault();
+    const raw = webpageLinksInput.value;
+    if (!raw || !raw.trim()) return;
+
+    const parsedEntries = splitCommaSeparated(raw)
+        .flatMap((value) => normalizeAlbumEntry(value))
+        .filter(Boolean);
+
+    if (parsedEntries.length === 0) return;
+
+    images = images.concat(parsedEntries);
+    saveAlbumData();
+    addWebpageModal.classList.remove('show');
+    renderGrid();
+}
+
 function renderFavoritesStrip() {
     favoritesStripItems.innerHTML = '';
 
@@ -333,17 +444,26 @@ function renderFavoritesStrip() {
     favoritesStrip.hidden = false;
     favoritesStripCount.textContent = favoriteImages.length;
 
-    favoriteImages.forEach((url, idx) => {
+    favoriteImages.forEach((favoriteEntry, idx) => {
         const item = document.createElement('div');
         item.className = 'favorites-strip-item';
 
-        const img = document.createElement('img');
-        img.src = url;
-        img.alt = `Favorite ${idx + 1}`;
-        img.loading = 'lazy';
+        const entry = favoriteEntry;
+        const url = getEntryValue(entry);
+        const isWebpage = isWebpageEntry(entry);
+        const img = document.createElement(isWebpage ? 'iframe' : 'img');
+        if (isWebpage) {
+            img.src = url;
+            img.title = `Favorite ${idx + 1}`;
+            img.setAttribute('referrerpolicy', 'no-referrer');
+        } else {
+            img.src = url;
+            img.alt = `Favorite ${idx + 1}`;
+            img.loading = 'lazy';
+        }
 
         // Click on the image opens the lightbox at the corresponding grid index
-        const gridIndex = images.indexOf(url);
+        const gridIndex = images.indexOf(entry);
         item.addEventListener('click', () => {
             if (gridIndex >= 0) openLightbox(gridIndex);
         });
@@ -356,7 +476,7 @@ function renderFavoritesStrip() {
         removeBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             if (gridIndex >= 0) {
-                const pos = favoriteImages.indexOf(url);
+                const pos = favoriteImages.indexOf(entry);
                 if (pos >= 0) favoriteImages.splice(pos, 1);
                 saveAlbumData();
                 renderGrid();
@@ -372,14 +492,14 @@ function renderFavoritesStrip() {
 // ── Favorite Toggle ───────────────────────────────────────────────────────
 
 function toggleFavorite(index) {
-    const url = images[index];
-    if (!url) return;
+    const entry = images[index];
+    if (!entry) return;
 
-    const pos = favoriteImages.indexOf(url);
+    const pos = favoriteImages.indexOf(entry);
     if (pos >= 0) {
         favoriteImages.splice(pos, 1);
     } else {
-        favoriteImages.push(url);
+        favoriteImages.push(entry);
     }
 
     saveAlbumData();
@@ -389,12 +509,12 @@ function toggleFavorite(index) {
 // ── Delete Image ──────────────────────────────────────────────────────────
 
 function deleteImage(index) {
-    if (!confirm(`Delete image ${index + 1}?`)) return;
-    const url = images[index];
+    if (!confirm(`Delete item ${index + 1}?`)) return;
+    const entry = images[index];
     images.splice(index, 1);
 
     // Also remove from favorites
-    const favPos = favoriteImages.indexOf(url);
+    const favPos = favoriteImages.indexOf(entry);
     if (favPos >= 0) favoriteImages.splice(favPos, 1);
 
     saveAlbumData();
@@ -404,10 +524,12 @@ function deleteImage(index) {
 // ── Add Image ─────────────────────────────────────────────────────────────
 
 function addImage(afterIndex) {
-    const url = prompt('Enter image URL:');
+    const url = prompt('Enter image URL or webpage URL:');
     if (!url || !url.trim()) return;
 
-    const trimmed = url.trim();
+    const trimmed = normalizeAlbumEntry(url.trim());
+    if (!trimmed) return;
+
     if (typeof afterIndex === 'number') {
         images.splice(afterIndex + 1, 0, trimmed);
     } else {
@@ -421,14 +543,14 @@ function addImage(afterIndex) {
 // ── Edit Raw URLs ─────────────────────────────────────────────────────────
 
 function openEditRawModal() {
-    rawAlbumUrls.value = images.join(',\n');
+    rawAlbumUrls.value = images.map(formatAlbumEntryForInput).join('\n');
     editRawModal.classList.add('show');
 }
 
 function handleEditRawSave(e) {
     e.preventDefault();
     const raw = rawAlbumUrls.value;
-    images = splitCommaSeparated(raw);
+    images = splitCommaSeparated(raw).map(normalizeAlbumEntry).filter(Boolean);
 
     // Clean up favorites — remove any that no longer exist
     favoriteImages = favoriteImages.filter(url => images.includes(url));
@@ -467,8 +589,21 @@ function showNextLightbox() {
 
 function updateLightboxImage() {
     if (lightboxIndex < 0 || lightboxIndex >= images.length) return;
-    lightboxImage.src = images[lightboxIndex];
-    lightboxImage.alt = `Image ${lightboxIndex + 1}`;
+    const entry = images[lightboxIndex];
+    const isWebpage = isWebpageEntry(entry);
+    const src = getEntryValue(entry);
+    if (isWebpage) {
+        lightboxImage.hidden = true;
+        lightboxFrame.hidden = false;
+        lightboxFrame.src = src;
+        lightboxFrame.title = `Webpage ${lightboxIndex + 1}`;
+    } else {
+        lightboxImage.hidden = false;
+        lightboxFrame.hidden = true;
+        lightboxFrame.src = '';
+        lightboxImage.src = src;
+        lightboxImage.alt = `Image ${lightboxIndex + 1}`;
+    }
     const multi = images.length > 1;
     lightboxPrev.style.display = multi ? '' : 'none';
     lightboxNext.style.display = multi ? '' : 'none';

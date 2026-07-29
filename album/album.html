@@ -12,8 +12,10 @@
             <button class="btn btn-back" id="albumBackBtn">← Back to Star</button>
             <h1 id="albumTitle">Album</h1>
             <div class="header-buttons">
+                <button class="btn btn-blur" id="blurToggleBtn" type="button">Blur Off</button>
                 <button class="btn btn-slideshow-toggle" id="albumSlideshowBtn">▶ Launch Slideshow</button>
                 <button class="btn btn-submit" id="editRawUrlsBtn">✏ Edit Raw URLs</button>
+                <button class="btn btn-submit" id="addWebpageBtn">🌐 Add Webpage Links</button>
                 <label class="columns-control" for="albumColumnsSelect">
                     <span>Grid size</span>
                     <select id="albumColumnsSelect">
@@ -51,6 +53,7 @@
         <button class="lightbox-nav lightbox-prev" id="lightboxPrev">‹</button>
         <div class="lightbox-image-wrapper">
             <img id="lightboxImage" src="" alt="Enlarged image">
+            <iframe id="lightboxFrame" title="Embedded webpage" hidden></iframe>
         </div>
         <button class="lightbox-nav lightbox-next" id="lightboxNext">›</button>
         <div class="lightbox-counter" id="lightboxCounter"></div>
@@ -68,6 +71,22 @@
                     <textarea id="rawAlbumUrls" rows="8" placeholder="https://image1.jpg, https://image2.jpg, ..."></textarea>
                 </div>
                 <button type="submit" class="btn btn-submit">Save Changes</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Add Webpage Links Modal -->
+    <div class="modal" id="addWebpageModal">
+        <div class="modal-content">
+            <span class="close" id="closeWebpageModal">&times;</span>
+            <h2>Add Webpage Links</h2>
+            <p class="album-config-hint">Paste webpage URLs, one per line. They will be rendered as embedded pages in the album.</p>
+            <form id="addWebpageForm">
+                <div class="form-group">
+                    <label for="webpageLinksInput">Webpage Links (one per line):</label>
+                    <textarea id="webpageLinksInput" rows="8" placeholder="https://example.com&#10;https://another.com"></textarea>
+                </div>
+                <button type="submit" class="btn btn-submit">Add Links</button>
             </form>
         </div>
     </div>

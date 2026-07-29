@@ -7,6 +7,7 @@ const searchInput = document.getElementById("searchInput");
 const starFilterMount = document.getElementById("starFilter");
 const siteFilterMount = document.getElementById("siteFilter");
 const addStarBtn = document.getElementById("addStarBtn");
+const blurToggleBtn = document.getElementById("blurToggleBtn");
 const addStarModal = document.getElementById("addStarModal");
 const closeAddModal = document.getElementById("closeAddModal");
 const addStarForm = document.getElementById("addStarForm");
@@ -48,11 +49,28 @@ const filterDropdowns = { star: null, site: null };
 // Initialize app
 document.addEventListener("DOMContentLoaded", async () => {
     setupFilterDropdowns();
+    initBlurToggle();
     await loadData();
     setupEventListeners();
 });
 
 // Setup event listeners
+function initBlurToggle() {
+    const savedState = localStorage.getItem("blurMode") === "on";
+    applyBlur(savedState);
+    blurToggleBtn?.addEventListener("click", () => {
+        applyBlur(!document.body.classList.contains("blur-active"));
+    });
+}
+
+function applyBlur(enabled) {
+    document.body.classList.toggle("blur-active", enabled);
+    if (blurToggleBtn) {
+        blurToggleBtn.textContent = enabled ? "Blur On" : "Blur Off";
+    }
+    localStorage.setItem("blurMode", enabled ? "on" : "off");
+}
+
 function setupEventListeners() {
     addStarBtn.addEventListener("click", openAddModal);
     closeAddModal.addEventListener("click", closeModal);
