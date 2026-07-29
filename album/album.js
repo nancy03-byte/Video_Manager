@@ -390,14 +390,10 @@ function renderGrid() {
         const originalBtn = document.createElement('button');
         originalBtn.className = 'album-original-btn';
         originalBtn.innerHTML = '🔎';
-        originalBtn.title = 'View original image';
-        originalBtn.addEventListener('click', async (e) => {
+        originalBtn.title = 'Open original image in viewer';
+        originalBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            const originalUrl = await resolveOriginalImageUrl(url);
-            if (originalUrl) {
-                mediaEl.src = originalUrl;
-                mediaEl.alt = 'Original image';
-            }
+            openOriginalImageInLightbox(index);
         });
         overlay.appendChild(originalBtn);
 
@@ -609,11 +605,47 @@ function handleEditRawSave(e) {
 
 // ── Lightbox ──────────────────────────────────────────────────────────────
 
+function refreshLightboxCounter() {
+    const multi = images.length > 1;
+    lightboxPrev.style.display = multi ? '' : 'none';
+    lightboxNext.style.display = multi ? '' : 'none';
+    lightboxCounter.textContent = `${lightboxIndex + 1} / ${images.length}`;
+}
+
 function openLightbox(index) {
     lightboxIndex = index;
     updateLightboxImage();
     lightbox.classList.add('active');
     document.body.style.overflow = 'hidden';
+}
+
+function openOriginalImageInLightbox(index) {
+    if (index < 0 || index >= images.length) return;
+
+    lightboxIndex = index;
+    lightbox.classList.add('active');
+    document.body.style.overflow = 'hidden';
+    refreshLightboxCounter();
+
+    const entry = images[index];
+    const src = getEntryValue(entry);
+
+    if (!lightboxImage) return;
+
+    lightboxImage.hidden = false;
+    lightboxImage.alt = 'Original image';
+    lightboxImage.src = '';
+
+    resolveOriginalImageUrl(src)
+        .then((originalUrl) => {
+            if (lightboxIndex !== index) return;
+            lightboxImage.src = originalUrl || src;
+        })
+        .catch(() => {
+            if (lightboxIndex === index) {
+                lightboxImage.src = src;
+            }
+        });
 }
 
 function closeLightbox() {
@@ -651,10 +683,7 @@ function updateLightboxImage() {
         lightboxImage.src = src;
         lightboxImage.alt = `Image ${lightboxIndex + 1}`;
     }
-    const multi = images.length > 1;
-    lightboxPrev.style.display = multi ? '' : 'none';
-    lightboxNext.style.display = multi ? '' : 'none';
-    lightboxCounter.textContent = `${lightboxIndex + 1} / ${images.length}`;
+    refreshLightboxCounter();
 }
 
 // ── Slideshow ─────────────────────────────────────────────────────────────
