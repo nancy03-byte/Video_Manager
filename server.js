@@ -1,8 +1,16 @@
-require('dotenv').config();
+const dotenv = require('dotenv');
+const path = require('path');
+
+const envPath = path.join(__dirname, 'config.env');
+const loadedEnv = dotenv.config({ path: envPath });
+if (loadedEnv.error) {
+  dotenv.config();
+}
+
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
-const path = require('path');
+const admin = require('firebase-admin');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -43,12 +51,14 @@ function invalidateCache(key) {
 // ── MongoDB Connection (non-blocking) ──────────────────────────────────────
 
 const MONGO_OPTIONS = {
-  serverSelectionTimeoutMS: 5000,   // fail fast if Atlas is unreachable
+  serverSelectionTimeoutMS: 5000,
   connectTimeoutMS: 10000,
   socketTimeoutMS: 45000,
 };
 
 let mongoConnected = false;
+let firebaseConnected = false;
+let firebaseDb = null;
 
 function connectMongo() {
   mongoose
@@ -64,6 +74,127 @@ function connectMongo() {
     });
 }
 
+function isFirebaseConfigured() {
+  return Boolean(
+    process.env.FIREBASE_SERVICE_ACCOUNT_JSON ||
+    process.env.FIREBASE_CREDENTIALS_PATH ||
+    process.env.FIREBASE_PROJECT_ID ||
+    process.env.GOOGLE_APPLICATION_CREDENTIALS ||
+    process.env.STORAGE_MODE === 'firebase'
+  );
+}
+
+function initFirebase() {
+  if (!isFirebaseConfigured()) return;
+  if (firebaseDb) return;
+
+  try {
+    if (admin.apps.length === 0) {
+      const projectId = process.env.FIREBASE_PROJECT_ID;
+      const credentialsPath = process.env.FIREBASE_CREDENTIALS_PATH;
+      const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+
+      if (serviceAccountJson) {
+        const parsed = JSON.parse(serviceAccountJson);
+        admin.initializeApp({
+          credential: admin.credential.cert(parsed),
+          projectId: projectId || parsed.project_id,
+        });
+      } else if (credentialsPath) {
+        admin.initializeApp({
+          credential: admin.credential.cert(path.resolve(credentialsPath)),
+          projectId,
+        });
+      } else {
+        admin.initializeApp({
+          credential: admin.credential.applicationDefault(),
+          projectId,
+        });
+      }
+    }
+
+    firebaseDb = admin.firestore();
+    firebaseConnected = true;
+    console.log('Connected to Firestore');
+  } catch (error) {
+    firebaseConnected = false;
+    console.error('Firebase connection error:', error.message);
+    console.log('Falling back to MongoDB');
+  }
+}
+
+function getStorageMode() {
+  return firebaseConnected ? 'firebase' : 'mongo';
+}
+
+function toStorageStar(star) {
+  if (!star) return null;
+  const normalized = { ...star };
+  if (typeof normalized.id !== 'undefined' && normalized.id !== null) {
+    normalized.id = Number(normalized.id) || normalized.id;
+  }
+  return normalized;
+}
+
+async function getStarsFromStorage() {
+  if (firebaseConnected && firebaseDb) {
+    const snapshot = await firebaseDb.collection('stars').get();
+    return snapshot.docs.map((doc) => toStorageStar({ ...doc.data(), id: doc.id }));
+  }
+
+  const stars = await Star.find().lean();
+  return stars.map((star) => toStorageStar(star));
+}
+
+async function getStarByParamInStorage(param) {
+  if (firebaseConnected && firebaseDb) {
+    const asNumber = Number(param);
+    if (!Number.isNaN(asNumber)) {
+      const snapshot = await firebaseDb.collection('stars').where('id', '==', asNumber).limit(1).get();
+      if (!snapshot.empty) {
+        const [doc] = snapshot.docs;
+        return toStorageStar({ ...doc.data(), id: doc.data().id || doc.id });
+      }
+    }
+
+    const doc = await firebaseDb.collection('stars').doc(String(param)).get();
+    if (doc.exists) {
+      return toStorageStar({ ...doc.data(), id: doc.data().id || doc.id });
+    }
+    return null;
+  }
+
+  if (isObjectIdString(param)) return await Star.findById(param);
+  const asNumber = Number(param);
+  if (!Number.isNaN(asNumber)) return await Star.findOne({ id: asNumber });
+  return await Star.findOne({ id: param });
+}
+
+async function saveStarInStorage(star) {
+  if (firebaseConnected && firebaseDb) {
+    const normalizedStar = toStorageStar(star);
+    await firebaseDb.collection('stars').doc(String(normalizedStar.id)).set(normalizedStar);
+    return normalizedStar;
+  }
+
+  return await star.save();
+}
+
+async function deleteStarInStorage(starId) {
+  if (firebaseConnected && firebaseDb) {
+    await firebaseDb.collection('stars').doc(String(starId)).delete();
+    return true;
+  }
+
+  if (isObjectIdString(starId)) {
+    await Star.findByIdAndDelete(starId);
+  } else {
+    const asNumber = Number(starId);
+    await Star.findOneAndDelete({ id: asNumber });
+  }
+  return true;
+}
+
 mongoose.connection.on('disconnected', () => {
   mongoConnected = false;
   console.log('MongoDB disconnected — running in offline mode');
@@ -74,6 +205,7 @@ mongoose.connection.on('reconnected', () => {
   console.log('MongoDB reconnected');
 });
 
+initFirebase();
 connectMongo();
 
 // ── Define Schemas ─────────────────────────────────────────────────────────
@@ -136,7 +268,7 @@ function createMovieId() {
 async function findStarByName(name) {
   const targetKey = normalizeStarKey(name);
   if (!targetKey) return null;
-  const allStars = getCached('stars') || [];
+  const allStars = getCached('stars') || (await getStarsFromStorage());
   return allStars.find((star) => normalizeStarKey(star.name) === targetKey) || null;
 }
 
@@ -145,13 +277,15 @@ async function ensureStarByName(name) {
   if (!normalizedName) return null;
   const existingStar = await findStarByName(normalizedName);
   if (existingStar) return existingStar;
-  const newStar = new Star({
+
+  const newStarData = {
     id: Date.now() + Math.floor(Math.random() * 1000000),
     name: normalizedName,
     pictureUrl: '',
     movies: [],
-  });
-  const saved = await newStar.save();
+  };
+
+  const saved = await saveStarInStorage(newStarData);
   invalidateCache('stars');
   return saved;
 }
@@ -161,16 +295,13 @@ function isObjectIdString(value) {
 }
 
 async function getStarByParam(param) {
-  if (isObjectIdString(param)) return await Star.findById(param);
-  const asNumber = Number(param);
-  if (!Number.isNaN(asNumber)) return await Star.findOne({ id: asNumber });
-  return await Star.findOne({ id: param });
+  return await getStarByParamInStorage(param);
 }
 
 // ── Middleware: DB connectivity guard ───────────────────────────────────────
 
 function requireDB(req, res, next) {
-  if (!mongoConnected) {
+  if (!mongoConnected && !firebaseConnected) {
     return res.status(503).json({
       error: 'Database not connected',
       message:
@@ -184,8 +315,10 @@ function requireDB(req, res, next) {
 
 app.get('/health', (_req, res) => {
   res.json({
-    status: mongoConnected ? 'ok' : 'degraded',
+    status: mongoConnected || firebaseConnected ? 'ok' : 'degraded',
     mongo: mongoConnected ? 'connected' : 'disconnected',
+    firebase: firebaseConnected ? 'connected' : 'disconnected',
+    storage: getStorageMode(),
     uptime: process.uptime(),
     timestamp: Date.now(),
   });
@@ -193,8 +326,10 @@ app.get('/health', (_req, res) => {
 
 app.get('/api/health', (_req, res) => {
   res.json({
-    status: mongoConnected ? 'ok' : 'degraded',
+    status: mongoConnected || firebaseConnected ? 'ok' : 'degraded',
     mongo: mongoConnected ? 'connected' : 'disconnected',
+    firebase: firebaseConnected ? 'connected' : 'disconnected',
+    storage: getStorageMode(),
     uptime: process.uptime(),
     timestamp: Date.now(),
   });
@@ -228,17 +363,13 @@ app.get('/api/proxy', async (req, res) => {
 
 app.get('/api/stars', requireDB, async (_req, res) => {
   try {
-    // Check cache first
     const cached = getCached('stars');
     if (cached) {
       return res.json(cached);
     }
 
-    const stars = await Star.find().lean();
-
-    // Update cache with the fresh data
+    const stars = await getStarsFromStorage();
     setCache('stars', stars);
-
     res.json(stars);
   } catch (error) {
     console.error('Error reading stars:', error);
@@ -251,14 +382,14 @@ app.post('/api/stars', requireDB, async (req, res) => {
     const name = normalizeStarName(req.body.name);
     if (!name) return res.status(400).json({ error: 'Star name is required' });
 
-    const newStar = new Star({
+    const newStarData = {
       id: Date.now() + Math.floor(Math.random() * 1000000),
       name,
       pictureUrl: normalizeStarName(req.body.pictureUrl) || '',
       movies: [],
-    });
+    };
 
-    const savedStar = await newStar.save();
+    const savedStar = await saveStarInStorage(newStarData);
     invalidateCache('stars');
     res.status(201).json(savedStar);
   } catch (error) {
@@ -279,7 +410,7 @@ app.put('/api/stars/:starId', requireDB, async (req, res) => {
 
     star.name = name;
     star.pictureUrl = pictureUrl;
-    const updatedStar = await star.save();
+    const updatedStar = await saveStarInStorage(star);
     invalidateCache('stars');
     res.json(updatedStar);
   } catch (error) {
@@ -327,11 +458,11 @@ app.post('/api/stars/:starId/movies', requireDB, async (req, res) => {
       if (otherStar) {
         const movieCopy = { ...moviePayload, id: createMovieId(), starNames: [otherStar.name] };
         otherStar.movies.push(movieCopy);
-        await otherStar.save();
+        await saveStarInStorage(otherStar);
       }
     }
 
-    const updatedStar = await star.save();
+    const updatedStar = await saveStarInStorage(star);
     invalidateCache('stars');
     const primaryMovie = updatedStar.movies[updatedStar.movies.length - 1];
 
@@ -372,7 +503,7 @@ app.put('/api/stars/:starId/movies/:movieIndex', requireDB, async (req, res) => 
     };
 
     star.movies[movieIndex] = updatedMovie;
-    const savedStar = await star.save();
+    const savedStar = await saveStarInStorage(star);
     invalidateCache('stars');
     res.json(savedStar.movies[movieIndex]);
   } catch (error) {
@@ -383,17 +514,10 @@ app.put('/api/stars/:starId/movies/:movieIndex', requireDB, async (req, res) => 
 
 app.delete('/api/stars/:starId', requireDB, async (req, res) => {
   try {
-    const param = req.params.starId;
-    let star;
-    if (isObjectIdString(param)) {
-      star = await Star.findByIdAndDelete(param);
-    } else {
-      const asNumber = Number(param);
-      star = await Star.findOneAndDelete({ id: asNumber });
-    }
-
+    const star = await getStarByParam(req.params.starId);
     if (!star) return res.status(404).json({ error: 'Star not found' });
 
+    await deleteStarInStorage(req.params.starId);
     invalidateCache('stars');
     res.json({ success: true });
   } catch (error) {
@@ -423,7 +547,7 @@ app.patch('/api/stars/:starId/movies/:movieIndex/album', requireDB, async (req, 
       movie.favoriteImages = String(req.body.favoriteImages);
     }
 
-    const savedStar = await star.save();
+    const savedStar = await saveStarInStorage(star);
     invalidateCache('stars');
     res.json({ albumImages: movie.albumImages, favoriteImages: movie.favoriteImages });
   } catch (error) {
@@ -443,7 +567,7 @@ app.delete('/api/stars/:starId/movies/:movieIndex', requireDB, async (req, res) 
     }
 
     star.movies.splice(movieIndex, 1);
-    await star.save();
+    await saveStarInStorage(star);
     invalidateCache('stars');
     res.json({ success: true });
   } catch (error) {

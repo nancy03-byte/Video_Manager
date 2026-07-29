@@ -435,8 +435,17 @@ function renderStars() {
     filteredStars.forEach((star) => {
         const starCard = document.createElement("div");
         starCard.className = "star-card";
+        starCard.dataset.starId = star.id;
+        
+        // Show placeholder initially
+        const placeholderHTML = `
+            <div class="star-card-placeholder" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: #e0e0e0; display: flex; align-items: center; justify-content: center;">
+                <div style="text-align: center;"><div style="font-size: 30px;">⟳</div><div style="font-size: 12px;">Loading...</div></div>
+            </div>
+        `;
+        
         starCard.innerHTML = `
-            <img src="${star.pictureUrl}" alt="${star.name}" class="star-card-image" onerror='this.src="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%27300%27 height=%27400%27%3E%3Crect fill=%27%23ddd%27 width=%27100%25%27 height=%27100%25%27/%3E%3Ctext x=%2750%25%27 y=%2750%25%27 text-anchor=%27middle%27 dy=%27.1em%27 fill=%27%23666%27 font-family=%27sans-serif%27 font-size=%2718%27%3EImage Not Found%3C/text%3E%3C/svg%3E"'>
+            <img src="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%27300%27 height=%27400%27 style=%27display:none%27%3E%3Crect fill=%27%23ddd%27 width=%27100%25%27 height=%27100%25%27/%3E%3C/svg%3E" alt="${star.name}" class="star-card-image" style="display: none;">
             <div class="star-card-content">
                 <h3>${star.name}</h3>
                 <p>${star.movies.length} movies</p>
@@ -444,8 +453,51 @@ function renderStars() {
         `;
         starCard.addEventListener("click", () => goToStarDetail(star.id));
         fragment.appendChild(starCard);
+        
+        // Load star image in background with priority for favorites
+        loadStarImagePriority(star.id, star.pictureUrl, starCard);
     });
     starsGrid.appendChild(fragment);
+}
+
+/**
+ * Load star image with smart priority (load favorites first in detail view)
+ */
+async function loadStarImagePriority(starId, pictureUrl, cardElement) {
+    if (!pictureUrl) return;
+    
+    // Check if cached
+    const cached = await hasImageBlob(pictureUrl);
+    if (cached) {
+        const blob = await getImageBlob(pictureUrl);
+        if (blob) {
+            const objectUrl = URL.createObjectURL(blob);
+            const img = cardElement.querySelector('.star-card-image');
+            img.src = objectUrl;
+            img.style.display = 'block';
+            return;
+        }
+    }
+    
+    // Load from network and cache
+    try {
+        const response = await fetch(pictureUrl);
+        if (response.ok) {
+            const blob = await response.blob();
+            // Cache for later use
+            await storeImageBlob(pictureUrl, blob, `star_${starId}`);
+            
+            const objectUrl = URL.createObjectURL(blob);
+            const img = cardElement.querySelector('.star-card-image');
+            img.src = objectUrl;
+            img.style.display = 'block';
+        }
+    } catch (error) {
+        // Fall back to original URL
+        const img = cardElement.querySelector('.star-card-image');
+        img.src = pictureUrl;
+        img.style.display = 'block';
+    }
 }
 
 // Apply filters
