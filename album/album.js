@@ -70,6 +70,7 @@ const editRawForm = document.getElementById('editRawForm');
 const rawAlbumUrls = document.getElementById('rawAlbumUrls');
 const favoritesLinksModal = document.getElementById('favoritesLinksModal');
 const closeFavoritesLinksModal = document.getElementById('closeFavoritesLinksModal');
+const favoritesLinksForm = document.getElementById('favoritesLinksForm');
 const favoritesLinksText = document.getElementById('favoritesLinksText');
 
 // Slideshow
@@ -146,6 +147,7 @@ function bindAlbumControls() {
     editRawForm.addEventListener('submit', handleEditRawSave);
     viewFavoritesLinksBtn.addEventListener('click', openFavoritesLinksModal);
     closeFavoritesLinksModal.addEventListener('click', () => favoritesLinksModal.classList.remove('show'));
+    favoritesLinksForm.addEventListener('submit', handleFavoritesLinksSave);
     window.addEventListener('click', (e) => {
         if (e.target === editRawModal) editRawModal.classList.remove('show');
         if (e.target === favoritesLinksModal) favoritesLinksModal.classList.remove('show');
@@ -600,6 +602,19 @@ function openEditRawModal() {
 function openFavoritesLinksModal() {
     favoritesLinksText.value = favoriteImages.map((entry) => getEntryValue(entry)).join('\n');
     favoritesLinksModal.classList.add('show');
+}
+
+function handleFavoritesLinksSave(e) {
+    e.preventDefault();
+    const raw = favoritesLinksText.value || '';
+    const nextFavorites = splitCommaSeparated(raw)
+        .map((value) => normalizeAlbumEntry(value))
+        .filter(Boolean);
+
+    favoriteImages = nextFavorites.filter((entry) => images.includes(entry) || isWebpageEntry(entry));
+    saveAlbumData();
+    renderGrid();
+    favoritesLinksModal.classList.remove('show');
 }
 
 function handleEditRawSave(e) {

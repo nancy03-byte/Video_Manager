@@ -78,11 +78,19 @@
 
     <!-- Favorite Links Modal -->
     <div class="modal" id="favoritesLinksModal">
-        <div class="modal-content">
+        <div class="modal-content modal-content-wide">
             <span class="close" id="closeFavoritesLinksModal">&times;</span>
             <h2>Favorite Image Links</h2>
-            <p class="album-config-hint">These are the links currently marked as favorites.</p>
-            <textarea id="favoritesLinksText" rows="8" readonly placeholder="No favorite links yet"></textarea>
+            <p class="album-config-hint">Edit or review the favorite links below. One link per line.</p>
+            <form id="favoritesLinksForm">
+                <div class="form-group">
+                    <label for="favoritesLinksText">Favorite Links</label>
+                    <textarea id="favoritesLinksText" rows="10" placeholder="https://example.com/image1.jpg&#10;https://example.com/image2.jpg"></textarea>
+                </div>
+                <div class="favorites-links-actions">
+                    <button type="submit" class="btn btn-submit">Save Favorites</button>
+                </div>
+            </form>
         </div>
     </div>
 
