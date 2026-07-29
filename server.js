@@ -366,8 +366,8 @@ app.put('/api/stars/:starId/movies/:movieIndex', requireDB, async (req, res) => 
       videoUrl: req.body.videoUrl || '',
       previewVideoUrl: req.body.previewVideoUrl || '',
       images: req.body.images || '',
-      albumImages: req.body.albumImages || '',
-      favoriteImages: req.body.favoriteImages || '',
+      albumImages: req.body.albumImages !== undefined ? String(req.body.albumImages) : (star.movies[movieIndex].albumImages || ''),
+      favoriteImages: req.body.favoriteImages !== undefined ? String(req.body.favoriteImages) : (star.movies[movieIndex].favoriteImages || ''),
       starNames: [star.name],
     };
 

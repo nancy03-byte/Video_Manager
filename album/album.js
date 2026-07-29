@@ -45,6 +45,7 @@ const albumBackBtn = document.getElementById('albumBackBtn');
 const albumColumnsSelect = document.getElementById('albumColumnsSelect');
 const albumSlideshowBtn = document.getElementById('albumSlideshowBtn');
 const editRawUrlsBtn = document.getElementById('editRawUrlsBtn');
+const viewFavoritesLinksBtn = document.getElementById('viewFavoritesLinksBtn');
 const blurToggleBtn = document.getElementById('blurToggleBtn');
 const addWebpageBtn = document.getElementById('addWebpageBtn');
 const addWebpageModal = document.getElementById('addWebpageModal');
@@ -67,6 +68,9 @@ const editRawModal = document.getElementById('editRawModal');
 const closeRawModal = document.getElementById('closeRawModal');
 const editRawForm = document.getElementById('editRawForm');
 const rawAlbumUrls = document.getElementById('rawAlbumUrls');
+const favoritesLinksModal = document.getElementById('favoritesLinksModal');
+const closeFavoritesLinksModal = document.getElementById('closeFavoritesLinksModal');
+const favoritesLinksText = document.getElementById('favoritesLinksText');
 
 // Slideshow
 const slideshowEl = document.getElementById('albumSlideshow');
@@ -140,8 +144,11 @@ function bindAlbumControls() {
     editRawUrlsBtn.addEventListener('click', openEditRawModal);
     closeRawModal.addEventListener('click', () => editRawModal.classList.remove('show'));
     editRawForm.addEventListener('submit', handleEditRawSave);
+    viewFavoritesLinksBtn.addEventListener('click', openFavoritesLinksModal);
+    closeFavoritesLinksModal.addEventListener('click', () => favoritesLinksModal.classList.remove('show'));
     window.addEventListener('click', (e) => {
         if (e.target === editRawModal) editRawModal.classList.remove('show');
+        if (e.target === favoritesLinksModal) favoritesLinksModal.classList.remove('show');
     });
 
     addWebpageBtn.addEventListener('click', () => {
@@ -588,6 +595,11 @@ function addImage(afterIndex) {
 function openEditRawModal() {
     rawAlbumUrls.value = images.map(formatAlbumEntryForInput).join('\n');
     editRawModal.classList.add('show');
+}
+
+function openFavoritesLinksModal() {
+    favoritesLinksText.value = favoriteImages.map((entry) => getEntryValue(entry)).join('\n');
+    favoritesLinksModal.classList.add('show');
 }
 
 function handleEditRawSave(e) {

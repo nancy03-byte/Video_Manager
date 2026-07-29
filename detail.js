@@ -769,10 +769,19 @@ async function renderMovies() {
         // Album images from albumImages field, fallback to regular images
         const albumImages = splitCommaSeparated(movie.albumImages || movie.images);
 
+        const siteLinks = splitCommaSeparated(movie.siteName || movie.siteUrl || movie.siteNameLink || '')
+            .map((value) => getLinkValue(value))
+            .filter(Boolean)
+            .slice(0, 2);
+
+        const siteButtonsHTML = siteLinks.length > 0
+            ? siteLinks.map((link) => `<button class="btn-site" data-open-url="${link}">${extractDomainName(link)}</button>`).join('')
+            : `<button class="btn-site" data-open-url="${siteLink}">${siteDomain}</button>`;
+
         // Row 2: Site + Preview buttons
         const sitePreviewHTML = `
             <div class="movie-buttons-row site-preview-row">
-                <button class="btn-site" data-open-url="${siteLink}">${siteDomain}</button>
+                ${siteButtonsHTML}
                 ${rawPreviewUrl ? `<button class="btn-preview" data-open-url="${rawPreviewUrl}">Preview</button>` : '<button class="btn-placeholder" disabled>Preview</button>'}
             </div>
         `;
@@ -991,6 +1000,7 @@ async function handleSaveMovie(e) {
     const movieStarsInput = document.getElementById('movieStars');
     const previewVideoUrl = document.getElementById('previewVideoUrl').value.trim();
     const isEditing = editingMovieIndex !== null;
+    const existingMovie = isEditing ? currentStar?.movies?.[editingMovieIndex] : null;
 
     addTrailingComma(videoUrlInput);
     addTrailingComma(movieImagesInput);
@@ -1027,14 +1037,14 @@ async function handleSaveMovie(e) {
     }
 
     const moviePayload = {
-        id: currentStar?.movies?.[editingMovieIndex]?.id || Date.now() + Math.floor(Math.random() * 1000000),
+        id: existingMovie?.id || Date.now() + Math.floor(Math.random() * 1000000),
         videoTitle,
         siteName,
         videoUrl,
         previewVideoUrl,
         images: movieImages,
         albumImages: albumImagesString,
-        favoriteImages: '',
+        favoriteImages: isEditing ? (existingMovie?.favoriteImages || '') : '',
         starNames: isEditing ? [currentStar.name] : starNames
     };
 
@@ -1054,7 +1064,7 @@ async function handleSaveMovie(e) {
     } catch (error) {
         console.log('Server not running, saving to localStorage only...');
         if (isEditing) {
-            currentStar.movies[editingMovieIndex] = { ...moviePayload, starNames: [currentStar.name] };
+            currentStar.movies[editingMovieIndex] = { ...existingMovie, ...moviePayload, starNames: [currentStar.name] };
         } else {
             applyMovieToLocalProfiles(moviePayload, starNames);
         }
