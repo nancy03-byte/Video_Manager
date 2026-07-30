@@ -523,6 +523,22 @@ function renderGrid() {
         });
         overlay.appendChild(originalBtn);
 
+        // Download original image button
+        const downloadBtn = document.createElement('button');
+        downloadBtn.className = 'album-download-btn';
+        downloadBtn.innerHTML = '⬇';
+        downloadBtn.title = 'Download original image';
+        if (isWebpage) {
+            downloadBtn.disabled = true;
+            downloadBtn.title = 'Webpage links cannot be downloaded';
+        } else {
+            downloadBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                downloadOriginalImage(index, downloadBtn);
+            });
+        }
+        overlay.appendChild(downloadBtn);
+
         // Favorite toggle
         const favBtn = document.createElement('button');
         favBtn.className = `album-fav-btn${isFavorite ? ' is-favorite' : ''}`;
@@ -809,6 +825,72 @@ function openOriginalImageInLightbox(index) {
                 lightboxImage.src = src;
             }
         });
+}
+
+// ── Download Original Image ─────────────────────────────────────────────
+
+async function downloadOriginalImage(index, triggerBtn) {
+    if (index < 0 || index >= images.length) return;
+    const entry = images[index];
+    if (isWebpageEntry(entry)) return;
+
+    const src = getEntryValue(entry);
+    const originalIcon = triggerBtn ? triggerBtn.innerHTML : null;
+
+    if (triggerBtn) {
+        triggerBtn.disabled = true;
+        triggerBtn.innerHTML = '⏳';
+    }
+
+    try {
+        let originalUrl = src;
+        try {
+            originalUrl = (await resolveOriginalImageUrl(src)) || src;
+        } catch (_) {
+            originalUrl = src;
+        }
+        await fetchAndDownloadBlob(originalUrl, index);
+    } finally {
+        if (triggerBtn) {
+            triggerBtn.disabled = false;
+            triggerBtn.innerHTML = originalIcon || '⬇';
+        }
+    }
+}
+
+async function fetchAndDownloadBlob(url, index) {
+    const filename = getDownloadFilename(url, index);
+    const proxyUrl = `/api/download-image?url=${encodeURIComponent(url)}&filename=${encodeURIComponent(filename)}`;
+
+    try {
+        const response = await fetch(proxyUrl);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const blob = await response.blob();
+        const blobUrl = URL.createObjectURL(blob);
+
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 4000);
+    } catch (err) {
+        console.error('Download proxy failed:', err);
+        alert('Sorry, this image could not be downloaded.');
+    }
+}
+
+function getDownloadFilename(url, index, mimeType) {
+    try {
+        const parsed = new URL(url, window.location.href);
+        const base = decodeURIComponent(parsed.pathname.split('/').pop() || '');
+        if (base && base.includes('.')) return base;
+    } catch (_) {
+        // ignore, fall through to generated name
+    }
+    const ext = (mimeType && mimeType.split('/')[1]) || 'jpg';
+    return `image-${index + 1}.${ext}`;
 }
 
 function closeLightbox() {
