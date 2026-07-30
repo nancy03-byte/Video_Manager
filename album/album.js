@@ -71,6 +71,7 @@ const lightboxClose = document.getElementById('lightboxClose');
 const lightboxPrev = document.getElementById('lightboxPrev');
 const lightboxNext = document.getElementById('lightboxNext');
 const lightboxCounter = document.getElementById('lightboxCounter');
+const lightboxFavBtn = document.getElementById('lightboxFavBtn');
 let lightboxIndex = -1;
 
 // Edit Raw Modal
@@ -247,6 +248,12 @@ function bindAlbumControls() {
     lightboxClose.addEventListener('click', closeLightbox);
     lightboxPrev.addEventListener('click', showPrevLightbox);
     lightboxNext.addEventListener('click', showNextLightbox);
+    lightboxFavBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (lightboxIndex < 0 || lightboxIndex >= images.length) return;
+        toggleFavorite(lightboxIndex);
+        updateLightboxFavButton();
+    });
     lightbox.addEventListener('click', (e) => {
         if (e.target === lightbox) closeLightbox();
     });
@@ -745,6 +752,20 @@ function handleEditRawSave(e) {
 
 // ── Lightbox ──────────────────────────────────────────────────────────────
 
+function updateLightboxFavButton() {
+    if (!lightboxFavBtn) return;
+    if (lightboxIndex < 0 || lightboxIndex >= images.length) return;
+
+    const entry = images[lightboxIndex];
+    const isWebpage = isWebpageEntry(entry);
+    const isFavorite = favoriteImages.includes(entry);
+
+    lightboxFavBtn.hidden = isWebpage;
+    lightboxFavBtn.classList.toggle('is-favorite', isFavorite);
+    lightboxFavBtn.innerHTML = isFavorite ? '❤️' : '🤍';
+    lightboxFavBtn.title = isFavorite ? 'Remove from favorites' : 'Add to favorites';
+}
+
 function refreshLightboxCounter() {
     const multi = images.length > 1;
     lightboxPrev.style.display = multi ? '' : 'none';
@@ -755,6 +776,7 @@ function refreshLightboxCounter() {
 function openLightbox(index) {
     lightboxIndex = index;
     updateLightboxImage();
+    updateLightboxFavButton();
     lightbox.classList.add('active');
     document.body.style.overflow = 'hidden';
 }
@@ -766,6 +788,7 @@ function openOriginalImageInLightbox(index) {
     lightbox.classList.add('active');
     document.body.style.overflow = 'hidden';
     refreshLightboxCounter();
+    updateLightboxFavButton();
 
     const entry = images[index];
     const src = getEntryValue(entry);
@@ -836,6 +859,7 @@ function updateLightboxImage() {
             });
     }
     refreshLightboxCounter();
+    updateLightboxFavButton();
 }
 
 // ── Slideshow ─────────────────────────────────────────────────────────────
