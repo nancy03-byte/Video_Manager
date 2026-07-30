@@ -32,6 +32,7 @@ let images = [];           // all album image URLs
 let favoriteImages = [];   // URLs flagged as favorites
 let starsData = [];
 let albumControlsBound = false;
+let showOriginalImages = false;
 
 // Smart loading state
 let imageLoadingState = {};
@@ -96,6 +97,8 @@ const favoritesStrip = document.getElementById('favoritesStrip');
 const favoritesStripItems = document.getElementById('favoritesStripItems');
 const favoritesStripCount = document.getElementById('favoritesStripCount');
 
+const toggleOriginalBtn = document.getElementById('toggleOriginalBtn');
+const originalUrlCache = new Map();
 // ── Init ──────────────────────────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -127,7 +130,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     favoriteImages = splitCommaSeparated(movie.favoriteImages || '');
 
     bindAlbumControls();
+    // Restore saved preference
+    showOriginalImages =
+        localStorage.getItem('showOriginalImages') === 'true';
 
+    toggleOriginalBtn.textContent = showOriginalImages
+        ? '🖼 Original Images'
+        : '🖼 Preview Images';
     if (images.length === 0) {
         albumGrid.innerHTML = '<div class="empty-state"><p>No images for this movie.</p></div>';
         return;
@@ -155,7 +164,32 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     renderGrid();
+    if (showOriginalImages) {
+    refreshGridImages();
+}
 });
+
+async function refreshGridImages() {
+
+    const items = albumGrid.querySelectorAll('.album-item img[data-url]');
+
+    for (const img of items) {
+
+        const previewUrl = img.dataset.url;
+
+        if (!showOriginalImages) {
+            img.src = previewUrl;
+            continue;
+        }
+
+        try {
+            const original = await resolveOriginalImageUrl(previewUrl);
+            img.src = original || previewUrl;
+        } catch (e) {
+            img.src = previewUrl;
+        }
+    }
+}
 
 function bindAlbumControls() {
     if (albumControlsBound) return;
@@ -181,6 +215,21 @@ function bindAlbumControls() {
         if (e.target === addWebpageModal) addWebpageModal.classList.remove('show');
     });
 
+    toggleOriginalBtn.addEventListener('click', async () => {
+        showOriginalImages = !showOriginalImages;
+
+        localStorage.setItem(
+        'showOriginalImages',
+        showOriginalImages ? 'true' : 'false'
+    );
+
+        toggleOriginalBtn.textContent = showOriginalImages
+            ? '🖼 Original Images'
+            : '🖼 Preview Images';
+
+        await refreshGridImages();
+    });
+
     albumSlideshowBtn.addEventListener('click', launchSlideshow);
     slideshowClose.addEventListener('click', closeSlideshow);
     slideshowPrev.addEventListener('click', slideshowGoPrev);
@@ -196,6 +245,7 @@ function bindAlbumControls() {
     });
 
     albumControlsBound = true;
+
 }
 
 // ── Data Loading ──────────────────────────────────────────────────────────
@@ -442,7 +492,7 @@ function renderGrid() {
                 openOriginalImageInLightbox(index);
             }
         };
-        
+
 
         // Overlay with actions
         const overlay = document.createElement('div');
