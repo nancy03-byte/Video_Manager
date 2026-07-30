@@ -808,20 +808,32 @@ function showNextLightbox() {
 
 function updateLightboxImage() {
     if (lightboxIndex < 0 || lightboxIndex >= images.length) return;
-    const entry = images[lightboxIndex];
+    const index = lightboxIndex;
+    const entry = images[index];
     const isWebpage = isWebpageEntry(entry);
     const src = getEntryValue(entry);
     if (isWebpage) {
         lightboxImage.hidden = true;
         lightboxFrame.hidden = false;
         lightboxFrame.src = src;
-        lightboxFrame.title = `Webpage ${lightboxIndex + 1}`;
+        lightboxFrame.title = `Webpage ${index + 1}`;
     } else {
         lightboxImage.hidden = false;
         lightboxFrame.hidden = true;
         lightboxFrame.src = '';
-        lightboxImage.src = src;
-        lightboxImage.alt = `Image ${lightboxIndex + 1}`;
+        lightboxImage.alt = `Image ${index + 1}`;
+        lightboxImage.src = '';
+
+        resolveOriginalImageUrl(src)
+            .then((originalUrl) => {
+                if (lightboxIndex !== index) return;
+                lightboxImage.src = originalUrl || src;
+            })
+            .catch(() => {
+                if (lightboxIndex === index) {
+                    lightboxImage.src = src;
+                }
+            });
     }
     refreshLightboxCounter();
 }
