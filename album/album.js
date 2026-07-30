@@ -183,9 +183,16 @@ async function refreshGridImages() {
         }
 
         try {
-            const original = await resolveOriginalImageUrl(previewUrl);
+            let original = originalUrlCache.get(previewUrl);
+
+            if (!original) {
+                original = await resolveOriginalImageUrl(previewUrl);
+                originalUrlCache.set(previewUrl, original);
+            }
+
             img.src = original || previewUrl;
-        } catch (e) {
+
+        } catch {
             img.src = previewUrl;
         }
     }
@@ -567,6 +574,9 @@ function renderGrid() {
 
     renderFavoritesStrip();
     updateSlideshowButton();
+    if (showOriginalImages) {
+    refreshGridImages();
+}
 }
 
 // ── Favorites Strip Rendering ─────────────────────────────────────────────
