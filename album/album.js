@@ -328,60 +328,8 @@ function splitCommaSeparated(value) {
         .filter(Boolean);
 }
 
-function extractImageUrlsFromHtml(html) {
-    if (!html) return [];
-    const urls = [];
-    const regex = /<img[^>]+src=["']([^"']+)["'][^>]*>/gi;
-    let match;
-    while ((match = regex.exec(html)) !== null) {
-        const src = match[1].trim();
-        if (src) urls.push(src);
-    }
-    return urls;
-}
-
-function normalizeOriginalCandidate(url) {
-    if (!url) return null;
-    if (url.includes('vipr')) {
-        return url.replace('/th/', '/i/');
-    }
-    if (url.includes('imx')) {
-        return url.replace('/t/', '/i/');
-    }
-    return url;
-}
-
-async function resolveOriginalImageUrl(pageUrl) {
-    const normalized = normalizeOriginalCandidate(pageUrl);
-    if (!normalized) return null;
-
-    try {
-        const response = await fetch(`/api/proxy?url=${encodeURIComponent(pageUrl)}`);
-        if (!response.ok) return normalized;
-        const html = await response.text();
-        const urls = extractImageUrlsFromHtml(html);
-        for (const url of urls) {
-            const candidate = normalizeOriginalCandidate(url);
-            if (candidate) {
-                return candidate;
-            }
-        }
-        return normalized;
-    } catch (_) {
-        return normalized;
-    }
-}
-
-function isWebpageEntry(entry) {
-    return typeof entry === 'string' && entry.startsWith('webpage:');
-}
-
-function getEntryValue(entry) {
-    if (isWebpageEntry(entry)) {
-        return entry.replace(/^webpage:/, '');
-    }
-    return entry;
-}
+// extractImageUrlsFromHtml, normalizeOriginalCandidate, resolveOriginalImageUrl,
+// isWebpageEntry, and getEntryValue now live in image-loader.js (shared with detail.js)
 
 function normalizeAlbumEntry(value) {
     const trimmed = String(value || '').trim();
@@ -502,7 +450,7 @@ function renderGrid() {
         // Click on item itself opens lightbox
         item.onclick = (e) => {
             // Only open lightbox if not clicking a button in the overlay
-            if (!e.target.closest('.album-fav-btn') && !e.target.closest('.album-del-btn') && !e.target.closest('.album-upload-btn') && !e.target.closest('.album-original-btn')) {
+            if (!e.target.closest('.album-fav-btn') && !e.target.closest('.album-del-btn') && !e.target.closest('.album-upload-btn') && !e.target.closest('.album-original-btn') && !e.target.closest('.album-download-btn')) {
                 openOriginalImageInLightbox(index);
             }
         };
@@ -534,7 +482,7 @@ function renderGrid() {
         } else {
             downloadBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                downloadOriginalImage(index, downloadBtn);
+                downloadAlbumImage(index, downloadBtn);
             });
         }
         overlay.appendChild(downloadBtn);
@@ -828,69 +776,15 @@ function openOriginalImageInLightbox(index) {
 }
 
 // ── Download Original Image ─────────────────────────────────────────────
+// downloadOriginalImage(rawUrl, fallbackName, triggerBtn) is shared via image-loader.js
 
-async function downloadOriginalImage(index, triggerBtn) {
+function downloadAlbumImage(index, triggerBtn) {
     if (index < 0 || index >= images.length) return;
     const entry = images[index];
     if (isWebpageEntry(entry)) return;
 
     const src = getEntryValue(entry);
-    const originalIcon = triggerBtn ? triggerBtn.innerHTML : null;
-
-    if (triggerBtn) {
-        triggerBtn.disabled = true;
-        triggerBtn.innerHTML = '⏳';
-    }
-
-    try {
-        let originalUrl = src;
-        try {
-            originalUrl = (await resolveOriginalImageUrl(src)) || src;
-        } catch (_) {
-            originalUrl = src;
-        }
-        await fetchAndDownloadBlob(originalUrl, index);
-    } finally {
-        if (triggerBtn) {
-            triggerBtn.disabled = false;
-            triggerBtn.innerHTML = originalIcon || '⬇';
-        }
-    }
-}
-
-async function fetchAndDownloadBlob(url, index) {
-    const filename = getDownloadFilename(url, index);
-    const proxyUrl = `/api/download-image?url=${encodeURIComponent(url)}&filename=${encodeURIComponent(filename)}`;
-
-    try {
-        const response = await fetch(proxyUrl);
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const blob = await response.blob();
-        const blobUrl = URL.createObjectURL(blob);
-
-        const link = document.createElement('a');
-        link.href = blobUrl;
-        link.download = filename;
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-        setTimeout(() => URL.revokeObjectURL(blobUrl), 4000);
-    } catch (err) {
-        console.error('Download proxy failed:', err);
-        alert('Sorry, this image could not be downloaded.');
-    }
-}
-
-function getDownloadFilename(url, index, mimeType) {
-    try {
-        const parsed = new URL(url, window.location.href);
-        const base = decodeURIComponent(parsed.pathname.split('/').pop() || '');
-        if (base && base.includes('.')) return base;
-    } catch (_) {
-        // ignore, fall through to generated name
-    }
-    const ext = (mimeType && mimeType.split('/')[1]) || 'jpg';
-    return `image-${index + 1}.${ext}`;
+    downloadOriginalImage(src, `image-${index + 1}`, triggerBtn);
 }
 
 function closeLightbox() {
