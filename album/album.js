@@ -570,7 +570,7 @@ function renderFavoritesStrip() {
         // Click on the image opens the lightbox at the corresponding grid index
         const gridIndex = images.indexOf(entry);
         item.addEventListener('click', () => {
-            if (gridIndex >= 0) openLightbox(gridIndex);
+            if (gridIndex >= 0) openOriginalImageInLightbox(gridIndex);
         });
 
         // Remove button
