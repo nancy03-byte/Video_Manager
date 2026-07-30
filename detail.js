@@ -934,7 +934,7 @@ function pausePreviewVideo(videoElement) {
 function openAlbum(movieIndex) {
     const movie = currentStar.movies[movieIndex];
     if (!movie) return;
-    window.open(`album/album.html?starId=${currentStar.id}&movieIndex=${movieIndex}`, '_blank');
+    window.location.href = `album/album.html?starId=${currentStar.id}&movieIndex=${movieIndex}`;
 }
 
 function openInNewTab(url) {
