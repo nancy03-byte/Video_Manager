@@ -51,6 +51,7 @@ const starTitle = document.getElementById('starTitle');
 const movieCount = document.getElementById('movieCount');
 const toggleSlideshowsBtn = document.getElementById('toggleSlideshowsBtn');
 const movieColumnsSelect = document.getElementById('movieColumnsSelect');
+const movieImagesToggleOriginalBtn = document.getElementById('movieImagesToggleOriginalBtn');
 const moviesGrid = document.getElementById('moviesGrid');
 
 // Images tab DOM
@@ -89,6 +90,7 @@ let slideShowIntervals = {};
 let areSlideshowsPaused = false;
 let editingMovieIndex = null;
 let movieSiteFilterDropdown = null;
+let movieImagesShowOriginal = false;
 
 // Images tab state
 let currentTab = 'movies';
@@ -145,6 +147,13 @@ function setupEventListeners() {
     resetMovieFiltersBtn.addEventListener('click', resetMovieFilters);
     toggleSlideshowsBtn.addEventListener('click', toggleAllSlideshows);
     movieColumnsSelect.addEventListener('change', updateMovieColumns);
+    movieImagesToggleOriginalBtn.addEventListener('click', async () => {
+        movieImagesShowOriginal = !movieImagesShowOriginal;
+        movieImagesToggleOriginalBtn.textContent = movieImagesShowOriginal
+            ? '🖼 Original Images'
+            : '🖼 Preview Images';
+        await refreshMovieThumbnailImages();
+    });
     window.addEventListener('click', (e) => {
         if (e.target === addMovieModal) closeMovieModalDialog();
         if (e.target === editStarModal) closeEditStarModalDialog();
@@ -1035,7 +1044,7 @@ function createThumbnailHTML(movieIndex, resolved, previewUrl) {
     if (resolved.type === 'images') {
         const slidesHTML = resolved.urls.map((url, i) => `
             <div class="slide${i === 0 ? ' active' : ''}" style="opacity: ${i === 0 ? '1' : '0'};">
-                <img src="${url}" alt="Movie image ${i + 1}">
+                <img src="${url}" data-preview-url="${url}" alt="Movie image ${i + 1}">
             </div>
         `).join('');
 
@@ -1072,6 +1081,29 @@ function createThumbnailHTML(movieIndex, resolved, previewUrl) {
             <img src="${imgSrc}" alt="Thumbnail" style="width:100%;height:100%;object-fit:cover;">
         </div>
     `;
+}
+
+async function refreshMovieThumbnailImages() {
+    const images = moviesGrid.querySelectorAll('.movie-thumbnail img[data-preview-url]');
+
+    for (const image of images) {
+        const previewUrl = image.dataset.previewUrl;
+        if (!movieImagesShowOriginal) {
+            image.src = previewUrl;
+            continue;
+        }
+
+        try {
+            let originalUrl = imagesOriginalUrlCache.get(previewUrl);
+            if (!originalUrl) {
+                originalUrl = await resolveOriginalImageUrl(previewUrl);
+                imagesOriginalUrlCache.set(previewUrl, originalUrl);
+            }
+            image.src = originalUrl || previewUrl;
+        } catch {
+            image.src = previewUrl;
+        }
+    }
 }
 
 function createFixedButtonRow(className, buttonsHTML, placeholderLabel) {
@@ -1153,6 +1185,7 @@ async function renderMovies() {
         // Row 4: Edit + Delete
         const editDeleteRowHTML = `
             <div class="movie-buttons-row edit-delete-row">
+                <button class="btn btn-favorite ${movie.isFavorite ? 'is-favorite' : ''}" data-favorite-index="${movieIndex}">${movie.isFavorite ? '❤️ Favorite' : '🤍 Favorite'}</button>
                 <button class="btn-edit" data-edit-index="${movieIndex}">Edit</button>
                 <button class="btn-delete-movie" data-delete-index="${movieIndex}">Delete</button>
             </div>
@@ -1195,6 +1228,7 @@ async function renderMovies() {
         movieCard.querySelector('[data-album-index]')?.addEventListener('click', () => openAlbum(movieIndex));
         movieCard.querySelector('[data-edit-index]')?.addEventListener('click', () => editMovie(movieIndex));
         movieCard.querySelector('[data-delete-index]')?.addEventListener('click', () => deleteMovie(movieIndex));
+        movieCard.querySelector('[data-favorite-index]')?.addEventListener('click', () => toggleMovieFavorite(movieIndex));
 
         if (hasImages && resolved.urls.length > 1) {
             setTimeout(() => startSlideshow(movieIndex), 100);
@@ -1205,6 +1239,28 @@ async function renderMovies() {
 
     const cards = await Promise.all(cardPromises);
     cards.forEach(card => moviesGrid.appendChild(card));
+    if (movieImagesShowOriginal) await refreshMovieThumbnailImages();
+}
+
+async function toggleMovieFavorite(index) {
+    const movie = currentStar?.movies?.[index];
+    if (!movie) return;
+    const wasFavorite = movie.isFavorite === true || movie.isFavorite === 'true';
+    movie.isFavorite = !wasFavorite;
+    saveData();
+
+    try {
+        const response = await fetch(`${API_URL}/stars/${currentStar.id}/movies/${index}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(movie)
+        });
+        if (!response.ok) throw new Error('Server error');
+    } catch (_) {
+        // localStorage remains the fallback when the server is unavailable
+    }
+
+    applyMovieFilters();
 }
 
 function startSlideshow(movieIndex) {
@@ -1393,6 +1449,9 @@ async function handleSaveMovie(e) {
         images: movieImages,
         albumImages: albumImagesString,
         favoriteImages: isEditing ? (existingMovie?.favoriteImages || '') : '',
+        isFavorite: isEditing
+            ? (existingMovie?.isFavorite === true || existingMovie?.isFavorite === 'true')
+            : false,
         starNames: isEditing ? [currentStar.name] : starNames
     };
 

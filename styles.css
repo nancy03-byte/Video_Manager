@@ -447,6 +447,22 @@ body.images-blurred img {
   flex: 1;
 }
 
+.library-tabs { align-self: flex-start; }
+
+.home-movies-grid {
+  --movies-per-row: 5;
+  width: 100%;
+}
+
+.home-movie-card .movie-thumbnail { height: 220px; }
+.home-movie-card .movie-info { padding: 16px; }
+.home-movie-card .movie-info h4 { margin-bottom: 8px; }
+.home-movie-star { color: #64748b; font-size: 14px; margin-bottom: 12px; }
+.home-movie-open { width: 100%; margin-top: 0; padding: 10px; }
+
+.btn-favorite { background: #fce7f3; color: #be185d; }
+.btn-favorite.is-favorite { background: #fbcfe8; }
+
 .star-card {
   background: #fff;
   border-radius: 20px;

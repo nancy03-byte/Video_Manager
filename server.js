@@ -105,6 +105,7 @@ const movieSchema = new mongoose.Schema({
   images: { type: String, default: '' },
   albumImages: { type: String, default: '' },
   favoriteImages: { type: String, default: '' },
+  isFavorite: { type: Boolean, default: false },
   starNames: [String],
 });
 
@@ -418,6 +419,7 @@ app.post('/api/stars/:starId/movies', requireDB, async (req, res) => {
       images: req.body.images || '',
       albumImages: req.body.albumImages || '',
       favoriteImages: req.body.favoriteImages || '',
+      isFavorite: req.body.isFavorite === true || req.body.isFavorite === 'true',
       starNames: [star.name],
     };
 
@@ -518,6 +520,10 @@ app.put('/api/stars/:starId/movies/:movieIndex', requireDB, async (req, res) => 
         req.body.favoriteImages !== undefined
           ? String(req.body.favoriteImages)
           : star.movies[movieIndex].favoriteImages || '',
+      isFavorite:
+        req.body.isFavorite !== undefined
+          ? req.body.isFavorite === true || req.body.isFavorite === 'true'
+          : Boolean(star.movies[movieIndex].isFavorite),
       starNames: [star.name],
     };
 
