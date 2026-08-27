@@ -103,6 +103,7 @@ const movieSchema = new mongoose.Schema({
   videoUrl: { type: String, default: '' },
   previewVideoUrl: { type: String, default: '' },
   images: { type: String, default: '' },
+  albumUrl: { type: String, default: '' },
   albumImages: { type: String, default: '' },
   favoriteImages: { type: String, default: '' },
   isFavorite: { type: Boolean, default: false },
@@ -417,6 +418,7 @@ app.post('/api/stars/:starId/movies', requireDB, async (req, res) => {
       videoUrl: req.body.videoUrl || '',
       previewVideoUrl: req.body.previewVideoUrl || '',
       images: req.body.images || '',
+      albumUrl: req.body.albumUrl || '',
       albumImages: req.body.albumImages || '',
       favoriteImages: req.body.favoriteImages || '',
       isFavorite: req.body.isFavorite === true || req.body.isFavorite === 'true',
@@ -512,6 +514,10 @@ app.put('/api/stars/:starId/movies/:movieIndex', requireDB, async (req, res) => 
       videoUrl: req.body.videoUrl || '',
       previewVideoUrl: req.body.previewVideoUrl || '',
       images: req.body.images || '',
+      albumUrl:
+        req.body.albumUrl !== undefined
+          ? String(req.body.albumUrl)
+          : star.movies[movieIndex].albumUrl || '',
       albumImages:
         req.body.albumImages !== undefined
           ? String(req.body.albumImages)
@@ -650,6 +656,38 @@ app.delete(
 /* -------------------------------------------------------------------------- */
 /*                          Image Download Proxy                              */
 /* -------------------------------------------------------------------------- */
+
+app.get('/api/proxy', async (req, res) => {
+  const { url } = req.query;
+  let parsedUrl;
+  try {
+    parsedUrl = new URL(url);
+    if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') throw new Error('Unsupported protocol');
+  } catch (_) {
+    return res.status(400).json({ error: 'Invalid url' });
+  }
+
+  try {
+    const upstream = await fetch(parsedUrl.toString(), {
+      redirect: 'follow',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Referer': `${parsedUrl.protocol}//${parsedUrl.host}/`,
+      },
+    });
+    if (!upstream.ok) {
+      return res.status(upstream.status).json({
+        error: `Album page returned HTTP ${upstream.status}`,
+      });
+    }
+    res.type('html').send(await upstream.text());
+  } catch (error) {
+    console.error('Error proxying album page:', error);
+    res.status(502).json({ error: 'Failed to fetch album page' });
+  }
+});
 
 // Streams a remote image back to the browser with a Content-Disposition
 // header so the browser downloads it directly instead of navigating to it.

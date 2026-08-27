@@ -148,28 +148,10 @@
                     </div>
                 </div>
 
-                <!-- ── Album Configuration Section ── -->
-                <details class="album-config-details" id="albumConfigDetails">
-                    <summary class="album-config-summary">
-                        <span class="album-config-toggle-text">📸 Album Configuration (optional)</span>
-                    </summary>
-                    <div class="album-config-body">
-                        <p class="album-config-hint">Paste HTML containing image anchors (e.g. from imx.to) and a base URL to automatically generate album images.</p>
-                        <div class="form-group">
-                            <label for="albumSourceHtml">Source HTML:</label>
-                            <textarea id="albumSourceHtml" rows="4" placeholder='Paste HTML containing href="https://imx.to/i/XXXXX" patterns'></textarea>
-                        </div>
-                        <div class="form-group">
-                            <label for="albumBaseUrl">Target Base URL:</label>
-                            <input type="url" id="albumBaseUrl" placeholder="e.g., https://i006.imx.to/i/2025/07/15/">
-                        </div>
-                        <div class="album-config-preview" id="albumConfigPreview" hidden>
-                            <p><strong>Generated URLs (<span id="albumConfigCount">0</span>):</strong></p>
-                            <pre id="albumConfigResult"></pre>
-                        </div>
-                        <button type="button" class="btn btn-preview-compact" id="albumConfigPreviewBtn">Preview</button>
-                    </div>
-                </details>
+                <div class="form-group">
+                    <label for="albumUrl">Album URL (optional):</label>
+                    <input type="url" id="albumUrl" placeholder="https://example.com/album">
+                </div>
 
                 <button type="submit" class="btn btn-submit" id="saveMovieBtn">💾 Save Movie</button>
             </form>
