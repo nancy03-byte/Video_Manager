@@ -53,6 +53,25 @@ const toggleSlideshowsBtn = document.getElementById('toggleSlideshowsBtn');
 const movieColumnsSelect = document.getElementById('movieColumnsSelect');
 const moviesGrid = document.getElementById('moviesGrid');
 
+// Images tab DOM
+const moviesTabBtn = document.getElementById('moviesTabBtn');
+const imagesTabBtn = document.getElementById('imagesTabBtn');
+const moviesSectionActions = document.getElementById('moviesSectionActions');
+const imagesSectionActions = document.getElementById('imagesSectionActions');
+const imagesGrid = document.getElementById('imagesGrid');
+const imagesToggleOriginalBtn = document.getElementById('imagesToggleOriginalBtn');
+const imagesColumnsSelect = document.getElementById('imagesColumnsSelect');
+
+// Images lightbox DOM
+const imagesLightbox = document.getElementById('imagesLightbox');
+const imagesLightboxImage = document.getElementById('imagesLightboxImage');
+const imagesLightboxClose = document.getElementById('imagesLightboxClose');
+const imagesLightboxPrev = document.getElementById('imagesLightboxPrev');
+const imagesLightboxNext = document.getElementById('imagesLightboxNext');
+const imagesLightboxCounter = document.getElementById('imagesLightboxCounter');
+const imagesLightboxFavBtn = document.getElementById('imagesLightboxFavBtn');
+const imagesLightboxGotoBtn = document.getElementById('imagesLightboxGotoBtn');
+
 // Album config DOM
 const albumConfigDetails = document.getElementById('albumConfigDetails');
 const albumSourceHtml = document.getElementById('albumSourceHtml');
@@ -71,6 +90,13 @@ let areSlideshowsPaused = false;
 let editingMovieIndex = null;
 let movieSiteFilterDropdown = null;
 
+// Images tab state
+let currentTab = 'movies';
+let favoriteEntries = [];        // [{ entry, movieIndex, movieTitle }]
+let imagesShowOriginal = false;
+let imagesLightboxIndex = -1;
+const imagesOriginalUrlCache = new Map();
+
 // Initialize
 document.addEventListener('DOMContentLoaded', async () => {
     const params = new URLSearchParams(window.location.search);
@@ -79,6 +105,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     initBlurToggle();
     setupMovieFilterDropdown();
     setupMovieColumns();
+    setupImagesColumns();
     await loadData();
     loadStarDetails(starId);
     setupEventListeners();
@@ -127,6 +154,38 @@ function setupEventListeners() {
     albumSourceHtml.addEventListener('input', onAlbumConfigChange);
     albumBaseUrl.addEventListener('input', onAlbumConfigChange);
     albumConfigPreviewBtn.addEventListener('click', handleAlbumConfigPreview);
+
+    // Tabs
+    moviesTabBtn.addEventListener('click', () => switchTab('movies'));
+    imagesTabBtn.addEventListener('click', () => switchTab('images'));
+
+    // Images tab controls
+    imagesToggleOriginalBtn.addEventListener('click', async () => {
+        imagesShowOriginal = !imagesShowOriginal;
+        imagesToggleOriginalBtn.textContent = imagesShowOriginal
+            ? '🖼 Original Images'
+            : '🖼 Preview Images';
+        await refreshImagesGridThumbnails();
+    });
+
+    imagesColumnsSelect.addEventListener('change', () => {
+        const cols = imagesColumnsSelect.value;
+        imagesGrid.style.setProperty('--album-cols', cols);
+        localStorage.setItem('detailImagesColumns', cols);
+    });
+
+    // Images lightbox
+    imagesLightboxClose.addEventListener('click', closeImagesLightbox);
+    imagesLightboxPrev.addEventListener('click', showPrevImagesLightbox);
+    imagesLightboxNext.addEventListener('click', showNextImagesLightbox);
+    imagesLightboxFavBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        removeFavoriteEntry(imagesLightboxIndex);
+    });
+    imagesLightbox.addEventListener('click', (e) => {
+        if (e.target === imagesLightbox) closeImagesLightbox();
+    });
+    document.addEventListener('keydown', handleImagesLightboxKeydown);
 }
 
 function onAlbumConfigChange() {
@@ -386,6 +445,295 @@ function updateMovieColumns() {
     movieColumnsSelect.value = String(boundedColumns);
     moviesGrid.style.setProperty('--movies-per-row', boundedColumns);
     localStorage.setItem('movieColumnsPerRow', String(boundedColumns));
+}
+
+// ── Images Tab ────────────────────────────────────────────────────────────
+
+function setupImagesColumns() {
+    const savedColumns = localStorage.getItem('detailImagesColumns') || imagesColumnsSelect.value;
+    imagesColumnsSelect.value = savedColumns;
+    imagesGrid.style.setProperty('--album-cols', savedColumns);
+}
+
+function switchTab(tab) {
+    currentTab = tab;
+    moviesTabBtn.classList.toggle('active', tab === 'movies');
+    imagesTabBtn.classList.toggle('active', tab === 'images');
+    moviesGrid.hidden = tab !== 'movies';
+    imagesGrid.hidden = tab !== 'images';
+    moviesSectionActions.hidden = tab !== 'movies';
+    imagesSectionActions.hidden = tab !== 'images';
+
+    if (tab === 'images') {
+        renderImagesTab();
+    }
+}
+
+function collectFavoriteEntries() {
+    const entries = [];
+    (currentStar?.movies || []).forEach((movie, movieIndex) => {
+        splitCommaSeparated(movie.favoriteImages).forEach((entry) => {
+            entries.push({ entry, movieIndex, movieTitle: movie.videoTitle || 'Untitled' });
+        });
+    });
+    return entries;
+}
+
+function renderImagesTab() {
+    favoriteEntries = collectFavoriteEntries();
+    renderImagesGrid();
+}
+
+function renderImagesGrid() {
+    imagesGrid.innerHTML = '';
+
+    if (favoriteEntries.length === 0) {
+        imagesGrid.innerHTML = '<div class="empty-state" style="grid-column: 1/-1;"><p>No favorite images yet. Star images from any movie\'s album to see them here.</p></div>';
+        return;
+    }
+
+    favoriteEntries.forEach((favEntry, index) => {
+        const { entry, movieIndex, movieTitle } = favEntry;
+        const isWebpage = isWebpageEntry(entry);
+        const url = getEntryValue(entry);
+
+        const item = document.createElement('div');
+        item.className = `album-item${isWebpage ? ' album-webpage-item' : ''}`;
+        item.dataset.index = index;
+
+        const mediaEl = document.createElement(isWebpage ? 'iframe' : 'img');
+        if (isWebpage) {
+            mediaEl.src = url;
+            mediaEl.title = movieTitle;
+            mediaEl.loading = 'lazy';
+            mediaEl.setAttribute('referrerpolicy', 'no-referrer');
+        } else {
+            mediaEl.src = url;
+            mediaEl.alt = movieTitle;
+            mediaEl.loading = 'lazy';
+            mediaEl.dataset.url = url;
+        }
+        item.appendChild(mediaEl);
+
+        item.addEventListener('click', (e) => {
+            if (e.target.closest('.album-item-overlay')) return;
+            openOriginalInImagesLightbox(index);
+        });
+
+        const overlay = document.createElement('div');
+        overlay.className = 'album-item-overlay';
+
+        // View original
+        const originalBtn = document.createElement('button');
+        originalBtn.className = 'album-original-btn';
+        originalBtn.innerHTML = '🔎';
+        originalBtn.title = 'Open original image in viewer';
+        originalBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            openOriginalInImagesLightbox(index);
+        });
+        overlay.appendChild(originalBtn);
+
+        // Download
+        if (!isWebpage) {
+            const downloadBtn = document.createElement('button');
+            downloadBtn.className = 'album-download-btn';
+            downloadBtn.innerHTML = '⬇';
+            downloadBtn.title = 'Download original image';
+            downloadBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                downloadOriginalImage(url, `${movieTitle}-image-${index + 1}`, downloadBtn);
+            });
+            overlay.appendChild(downloadBtn);
+        }
+
+        // Remove from favorites
+        const favBtn = document.createElement('button');
+        favBtn.className = 'album-fav-btn is-favorite';
+        favBtn.innerHTML = '❤️';
+        favBtn.title = 'Remove from favorites';
+        favBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            removeFavoriteEntry(index);
+        });
+        overlay.appendChild(favBtn);
+
+        // Go to this movie's full album
+        const gotoBtn = document.createElement('button');
+        gotoBtn.className = 'album-goto-btn';
+        gotoBtn.innerHTML = '📁';
+        gotoBtn.title = `Open full album — ${movieTitle}`;
+        gotoBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            openAlbum(movieIndex);
+        });
+        overlay.appendChild(gotoBtn);
+
+        const label = document.createElement('span');
+        label.className = 'album-movie-label';
+        label.textContent = movieTitle;
+        label.title = movieTitle;
+        overlay.appendChild(label);
+
+        item.appendChild(overlay);
+        imagesGrid.appendChild(item);
+    });
+
+    if (imagesShowOriginal) refreshImagesGridThumbnails();
+}
+
+async function refreshImagesGridThumbnails() {
+    const imgs = imagesGrid.querySelectorAll('.album-item img[data-url]');
+    for (const img of imgs) {
+        const previewUrl = img.dataset.url;
+        if (!imagesShowOriginal) {
+            img.src = previewUrl;
+            continue;
+        }
+        try {
+            let original = imagesOriginalUrlCache.get(previewUrl);
+            if (!original) {
+                original = await resolveOriginalImageUrl(previewUrl);
+                imagesOriginalUrlCache.set(previewUrl, original);
+            }
+            img.src = original || previewUrl;
+        } catch {
+            img.src = previewUrl;
+        }
+    }
+}
+
+async function removeFavoriteEntry(index) {
+    const favEntry = favoriteEntries[index];
+    if (!favEntry) return;
+    const movie = currentStar.movies[favEntry.movieIndex];
+    if (!movie) return;
+
+    const favList = splitCommaSeparated(movie.favoriteImages);
+    const pos = favList.indexOf(favEntry.entry);
+    if (pos >= 0) favList.splice(pos, 1);
+    movie.favoriteImages = favList.join(',');
+
+    saveData();
+
+    try {
+        await fetch(`${API_URL}/stars/${currentStar.id}/movies/${favEntry.movieIndex}/album`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ favoriteImages: movie.favoriteImages })
+        });
+    } catch (_) {
+        // Offline is fine — localStorage is already updated
+    }
+
+    favoriteEntries = collectFavoriteEntries();
+    renderImagesGrid();
+
+    if (imagesLightbox.classList.contains('active')) {
+        if (favoriteEntries.length === 0) {
+            closeImagesLightbox();
+        } else {
+            imagesLightboxIndex = Math.min(imagesLightboxIndex, favoriteEntries.length - 1);
+            updateImagesLightboxImage();
+        }
+    }
+}
+
+// ── Images Lightbox ──────────────────────────────────────────────────────
+
+function openOriginalInImagesLightbox(index) {
+    if (index < 0 || index >= favoriteEntries.length) return;
+
+    imagesLightboxIndex = index;
+    imagesLightbox.classList.add('active');
+    document.body.style.overflow = 'hidden';
+    refreshImagesLightboxCounter();
+    updateImagesLightboxGotoBtn();
+
+    const { entry } = favoriteEntries[index];
+    const isWebpage = isWebpageEntry(entry);
+    const src = getEntryValue(entry);
+
+    imagesLightboxFavBtn.hidden = isWebpage;
+
+    imagesLightboxImage.hidden = false;
+    imagesLightboxImage.alt = 'Original image';
+    imagesLightboxImage.src = '';
+
+    resolveOriginalImageUrl(src)
+        .then((originalUrl) => {
+            if (imagesLightboxIndex !== index) return;
+            imagesLightboxImage.src = originalUrl || src;
+        })
+        .catch(() => {
+            if (imagesLightboxIndex === index) {
+                imagesLightboxImage.src = src;
+            }
+        });
+}
+
+function updateImagesLightboxImage() {
+    if (imagesLightboxIndex < 0 || imagesLightboxIndex >= favoriteEntries.length) return;
+    const index = imagesLightboxIndex;
+    const { entry } = favoriteEntries[index];
+    const isWebpage = isWebpageEntry(entry);
+    const src = getEntryValue(entry);
+
+    imagesLightboxFavBtn.hidden = isWebpage;
+    imagesLightboxImage.src = '';
+
+    resolveOriginalImageUrl(src)
+        .then((originalUrl) => {
+            if (imagesLightboxIndex !== index) return;
+            imagesLightboxImage.src = originalUrl || src;
+        })
+        .catch(() => {
+            if (imagesLightboxIndex === index) {
+                imagesLightboxImage.src = src;
+            }
+        });
+
+    refreshImagesLightboxCounter();
+    updateImagesLightboxGotoBtn();
+}
+
+function showPrevImagesLightbox() {
+    if (favoriteEntries.length === 0) return;
+    imagesLightboxIndex = (imagesLightboxIndex - 1 + favoriteEntries.length) % favoriteEntries.length;
+    updateImagesLightboxImage();
+}
+
+function showNextImagesLightbox() {
+    if (favoriteEntries.length === 0) return;
+    imagesLightboxIndex = (imagesLightboxIndex + 1) % favoriteEntries.length;
+    updateImagesLightboxImage();
+}
+
+function closeImagesLightbox() {
+    imagesLightbox.classList.remove('active');
+    document.body.style.overflow = '';
+    imagesLightboxIndex = -1;
+}
+
+function refreshImagesLightboxCounter() {
+    const multi = favoriteEntries.length > 1;
+    imagesLightboxPrev.style.display = multi ? '' : 'none';
+    imagesLightboxNext.style.display = multi ? '' : 'none';
+    imagesLightboxCounter.textContent = `${imagesLightboxIndex + 1} / ${favoriteEntries.length}`;
+}
+
+function updateImagesLightboxGotoBtn() {
+    if (imagesLightboxIndex < 0 || imagesLightboxIndex >= favoriteEntries.length) return;
+    const { movieIndex, movieTitle } = favoriteEntries[imagesLightboxIndex];
+    imagesLightboxGotoBtn.title = `Open full album — ${movieTitle}`;
+    imagesLightboxGotoBtn.onclick = () => openAlbum(movieIndex);
+}
+
+function handleImagesLightboxKeydown(e) {
+    if (!imagesLightbox.classList.contains('active')) return;
+    if (e.key === 'Escape') closeImagesLightbox();
+    if (e.key === 'ArrowLeft') showPrevImagesLightbox();
+    if (e.key === 'ArrowRight') showNextImagesLightbox();
 }
 
 async function loadData() {
@@ -1108,6 +1456,7 @@ async function handleSaveMovie(e) {
     updateMovieCount();
     populateMovieFilters();
     applyMovieFilters();
+    if (currentTab === 'images') renderImagesTab();
 }
 
 // Handle edit star
@@ -1192,6 +1541,7 @@ async function deleteMovie(index) {
         updateMovieCount();
         populateMovieFilters();
         applyMovieFilters();
+        if (currentTab === 'images') renderImagesTab();
     }
 }
 

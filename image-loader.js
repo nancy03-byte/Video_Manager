@@ -1,4 +1,143 @@
 // ═══════════════════════════════════════════════════════════════════════════
+// Shared Album Entry Helpers — used by album.js and detail.js
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Album entries are plain URL strings, or "webpage:<url>" for embedded pages.
+ */
+function isWebpageEntry(entry) {
+    return typeof entry === 'string' && entry.startsWith('webpage:');
+}
+
+function getEntryValue(entry) {
+    if (isWebpageEntry(entry)) {
+        return entry.replace(/^webpage:/, '');
+    }
+    return entry;
+}
+
+function extractImageUrlsFromHtml(html) {
+    if (!html) return [];
+    const urls = [];
+    const regex = /<img[^>]+src=["']([^"']+)["'][^>]*>/gi;
+    let match;
+    while ((match = regex.exec(html)) !== null) {
+        const src = match[1].trim();
+        if (src) urls.push(src);
+    }
+    return urls;
+}
+
+function normalizeOriginalCandidate(url) {
+    if (!url) return null;
+    if (url.includes('vipr')) {
+        return url.replace('/th/', '/i/');
+    }
+    if (url.includes('imx')) {
+        return url.replace('/t/', '/i/');
+    }
+    return url;
+}
+
+/**
+ * Resolve the true original-size image URL for a given (possibly thumbnail)
+ * image/page URL. Falls back to a pattern-normalized URL if the source page
+ * can't be fetched/parsed.
+ */
+async function resolveOriginalImageUrl(pageUrl) {
+    const normalized = normalizeOriginalCandidate(pageUrl);
+    if (!normalized) return null;
+
+    try {
+        const response = await fetch(`/api/proxy?url=${encodeURIComponent(pageUrl)}`);
+        if (!response.ok) return normalized;
+        const html = await response.text();
+        const urls = extractImageUrlsFromHtml(html);
+        for (const url of urls) {
+            const candidate = normalizeOriginalCandidate(url);
+            if (candidate) {
+                return candidate;
+            }
+        }
+        return normalized;
+    } catch (_) {
+        return normalized;
+    }
+}
+
+// ── Shared Download Helper ──────────────────────────────────────────────────
+
+function getDownloadFilename(url, fallbackName, mimeType) {
+    try {
+        const parsed = new URL(url, window.location.href);
+        const base = decodeURIComponent(parsed.pathname.split('/').pop() || '');
+        if (base && base.includes('.')) return base;
+    } catch (_) {
+        // ignore, fall through to generated name
+    }
+    const ext = (mimeType && mimeType.split('/')[1]) || 'jpg';
+    return `${fallbackName || 'image'}.${ext}`;
+}
+
+/**
+ * Fetches an image through the server-side download proxy (avoids browser
+ * CORS restrictions on the image host) and triggers a real file download.
+ */
+async function fetchAndDownloadBlob(url, fallbackName) {
+    const filename = getDownloadFilename(url, fallbackName);
+    const proxyUrl = `/api/download-image?url=${encodeURIComponent(url)}&filename=${encodeURIComponent(filename)}`;
+
+    try {
+        const response = await fetch(proxyUrl);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const blob = await response.blob();
+        const blobUrl = URL.createObjectURL(blob);
+
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 4000);
+    } catch (err) {
+        console.error('Download proxy failed:', err);
+        alert('Sorry, this image could not be downloaded.');
+    }
+}
+
+/**
+ * Resolves the original-size URL for `rawUrl` and downloads it.
+ * @param {string} rawUrl - image or thumbnail URL
+ * @param {string} fallbackName - filename to use if the URL has no usable basename
+ * @param {HTMLButtonElement} [triggerBtn] - optional button to show a loading state on
+ */
+async function downloadOriginalImage(rawUrl, fallbackName, triggerBtn) {
+    if (!rawUrl) return;
+    const originalIcon = triggerBtn ? triggerBtn.innerHTML : null;
+
+    if (triggerBtn) {
+        triggerBtn.disabled = true;
+        triggerBtn.innerHTML = '⏳';
+    }
+
+    try {
+        let originalUrl = rawUrl;
+        try {
+            originalUrl = (await resolveOriginalImageUrl(rawUrl)) || rawUrl;
+        } catch (_) {
+            originalUrl = rawUrl;
+        }
+        await fetchAndDownloadBlob(originalUrl, fallbackName);
+    } finally {
+        if (triggerBtn) {
+            triggerBtn.disabled = false;
+            triggerBtn.innerHTML = originalIcon || '⬇';
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // Smart Image Loader — Sequential loading with IndexedDB caching
 // - Load favorites first
 // - Load remaining images in background sequence

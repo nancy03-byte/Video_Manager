@@ -328,60 +328,8 @@ function splitCommaSeparated(value) {
         .filter(Boolean);
 }
 
-function extractImageUrlsFromHtml(html) {
-    if (!html) return [];
-    const urls = [];
-    const regex = /<img[^>]+src=["']([^"']+)["'][^>]*>/gi;
-    let match;
-    while ((match = regex.exec(html)) !== null) {
-        const src = match[1].trim();
-        if (src) urls.push(src);
-    }
-    return urls;
-}
-
-function normalizeOriginalCandidate(url) {
-    if (!url) return null;
-    if (url.includes('vipr')) {
-        return url.replace('/th/', '/i/');
-    }
-    if (url.includes('imx')) {
-        return url.replace('/t/', '/i/');
-    }
-    return url;
-}
-
-async function resolveOriginalImageUrl(pageUrl) {
-    const normalized = normalizeOriginalCandidate(pageUrl);
-    if (!normalized) return null;
-
-    try {
-        const response = await fetch(`/api/proxy?url=${encodeURIComponent(pageUrl)}`);
-        if (!response.ok) return normalized;
-        const html = await response.text();
-        const urls = extractImageUrlsFromHtml(html);
-        for (const url of urls) {
-            const candidate = normalizeOriginalCandidate(url);
-            if (candidate) {
-                return candidate;
-            }
-        }
-        return normalized;
-    } catch (_) {
-        return normalized;
-    }
-}
-
-function isWebpageEntry(entry) {
-    return typeof entry === 'string' && entry.startsWith('webpage:');
-}
-
-function getEntryValue(entry) {
-    if (isWebpageEntry(entry)) {
-        return entry.replace(/^webpage:/, '');
-    }
-    return entry;
-}
+// extractImageUrlsFromHtml, normalizeOriginalCandidate, resolveOriginalImageUrl,
+// isWebpageEntry, and getEntryValue now live in image-loader.js (shared with detail.js)
 
 function normalizeAlbumEntry(value) {
     const trimmed = String(value || '').trim();
@@ -502,7 +450,7 @@ function renderGrid() {
         // Click on item itself opens lightbox
         item.onclick = (e) => {
             // Only open lightbox if not clicking a button in the overlay
-            if (!e.target.closest('.album-fav-btn') && !e.target.closest('.album-del-btn') && !e.target.closest('.album-upload-btn') && !e.target.closest('.album-original-btn')) {
+            if (!e.target.closest('.album-fav-btn') && !e.target.closest('.album-del-btn') && !e.target.closest('.album-upload-btn') && !e.target.closest('.album-original-btn') && !e.target.closest('.album-download-btn')) {
                 openOriginalImageInLightbox(index);
             }
         };
@@ -522,6 +470,22 @@ function renderGrid() {
             openOriginalImageInLightbox(index);
         });
         overlay.appendChild(originalBtn);
+
+        // Download original image button
+        const downloadBtn = document.createElement('button');
+        downloadBtn.className = 'album-download-btn';
+        downloadBtn.innerHTML = '⬇';
+        downloadBtn.title = 'Download original image';
+        if (isWebpage) {
+            downloadBtn.disabled = true;
+            downloadBtn.title = 'Webpage links cannot be downloaded';
+        } else {
+            downloadBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                downloadAlbumImage(index, downloadBtn);
+            });
+        }
+        overlay.appendChild(downloadBtn);
 
         // Favorite toggle
         const favBtn = document.createElement('button');
@@ -809,6 +773,18 @@ function openOriginalImageInLightbox(index) {
                 lightboxImage.src = src;
             }
         });
+}
+
+// ── Download Original Image ─────────────────────────────────────────────
+// downloadOriginalImage(rawUrl, fallbackName, triggerBtn) is shared via image-loader.js
+
+function downloadAlbumImage(index, triggerBtn) {
+    if (index < 0 || index >= images.length) return;
+    const entry = images[index];
+    if (isWebpageEntry(entry)) return;
+
+    const src = getEntryValue(entry);
+    downloadOriginalImage(src, `image-${index + 1}`, triggerBtn);
 }
 
 function closeLightbox() {

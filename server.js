@@ -642,6 +642,74 @@ app.delete(
   }
 );
 /* -------------------------------------------------------------------------- */
+/*                          Image Download Proxy                              */
+/* -------------------------------------------------------------------------- */
+
+// Streams a remote image back to the browser with a Content-Disposition
+// header so the browser downloads it directly instead of navigating to it.
+// Fetching server-side sidesteps browser CORS restrictions on the image host.
+app.get('/api/download-image', async (req, res) => {
+  const { url, filename } = req.query;
+
+  if (!url || typeof url !== 'string') {
+    return res.status(400).json({ error: 'Missing url query parameter' });
+  }
+
+  let parsedUrl;
+  try {
+    parsedUrl = new URL(url);
+    if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+      throw new Error('Unsupported protocol');
+    }
+  } catch (_) {
+    return res.status(400).json({ error: 'Invalid url' });
+  }
+
+  try {
+    const upstream = await fetch(parsedUrl.toString(), {
+      headers: {
+        // Some image hosts reject requests without a browser-like UA/referer
+        'User-Agent': 'Mozilla/5.0 (compatible; StarLibraryDownloader/1.0)',
+      },
+    });
+
+    if (!upstream.ok || !upstream.body) {
+      return res.status(upstream.status || 502).json({ error: 'Failed to fetch image' });
+    }
+
+    const contentType = upstream.headers.get('content-type') || 'application/octet-stream';
+    const safeName =
+      (filename && String(filename).replace(/[\\/:*?"<>|\r\n]+/g, '_')) ||
+      parsedUrl.pathname.split('/').pop() ||
+      'image';
+
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Disposition', `attachment; filename="${safeName}"`);
+    const contentLength = upstream.headers.get('content-length');
+    if (contentLength) res.setHeader('Content-Length', contentLength);
+
+    const reader = upstream.body.getReader();
+    res.on('close', () => {
+      reader.cancel().catch(() => {});
+    });
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      res.write(Buffer.from(value));
+    }
+    res.end();
+  } catch (error) {
+    console.error('Error proxying image download:', error);
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Failed to download image' });
+    } else {
+      res.end();
+    }
+  }
+});
+
+/* -------------------------------------------------------------------------- */
 /*                              SPA Fallback                                  */
 /* -------------------------------------------------------------------------- */
 

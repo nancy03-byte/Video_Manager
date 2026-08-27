@@ -55,11 +55,14 @@
             <button class="btn btn-reset" id="resetMovieFiltersBtn">Reset Movie Filters</button>
         </div>
 
-        <!-- Movies Grid -->
+        <!-- Movies / Images Tabs -->
         <div class="movies-section">
             <div class="movies-section-header">
-                <h3>Movies</h3>
-                <div class="movies-section-actions">
+                <div class="section-tabs" id="detailSectionTabs">
+                    <button class="tab-btn active" id="moviesTabBtn" type="button" data-tab="movies">🎬 Movies</button>
+                    <button class="tab-btn" id="imagesTabBtn" type="button" data-tab="images">💗 Images</button>
+                </div>
+                <div class="movies-section-actions" id="moviesSectionActions">
                     <label class="movies-per-row-control" for="movieColumnsSelect">
                         <span>Per row</span>
                         <select id="movieColumnsSelect">
@@ -73,11 +76,40 @@
                     <button class="btn btn-add" id="addMovieBtn">+ Add Movie</button>
                     <button class="btn btn-slideshow-toggle" id="toggleSlideshowsBtn" type="button">Stop Slides</button>
                 </div>
+                <div class="movies-section-actions" id="imagesSectionActions" hidden>
+                    <button class="btn btn-submit" id="imagesToggleOriginalBtn" type="button">🖼 Preview Images</button>
+                    <label class="movies-per-row-control" for="imagesColumnsSelect">
+                        <span>Per row</span>
+                        <select id="imagesColumnsSelect">
+                            <option value="2">2</option>
+                            <option value="3">3</option>
+                            <option value="4" selected>4</option>
+                            <option value="5">5</option>
+                            <option value="6">6</option>
+                        </select>
+                    </label>
+                </div>
             </div>
             <div class="movies-grid" id="moviesGrid">
                 <!-- Movies will be loaded here -->
             </div>
+            <div class="album-grid" id="imagesGrid" hidden>
+                <!-- Favorite images across all movies will be loaded here -->
+            </div>
         </div>
+    </div>
+
+    <!-- Images Lightbox -->
+    <div class="album-lightbox" id="imagesLightbox">
+        <button class="lightbox-close" id="imagesLightboxClose">&times;</button>
+        <button class="lightbox-nav lightbox-prev" id="imagesLightboxPrev">‹</button>
+        <div class="lightbox-image-wrapper">
+            <img id="imagesLightboxImage" src="" alt="Enlarged image">
+            <button class="lightbox-fav-btn is-favorite" id="imagesLightboxFavBtn" type="button" title="Remove from favorites">❤️</button>
+            <button class="lightbox-goto-album-btn" id="imagesLightboxGotoBtn" type="button" title="Open full album for this movie">📁 Open Album</button>
+        </div>
+        <button class="lightbox-nav lightbox-next" id="imagesLightboxNext">›</button>
+        <div class="lightbox-counter" id="imagesLightboxCounter"></div>
     </div>
 
     <!-- Add / Edit Movie Modal -->

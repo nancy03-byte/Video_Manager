@@ -12,6 +12,11 @@
 
 html { scroll-behavior: smooth; }
 
+/* Ensure the plain `hidden` attribute always wins over classes that set
+   `display` (e.g. .movies-grid, .album-grid, .movies-section-actions),
+   since equal-specificity author rules would otherwise override it. */
+[hidden] { display: none !important; }
+
 body {
   font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
   color: #1e293b;
@@ -548,6 +553,36 @@ body.images-blurred img {
   font-weight: 700;
   letter-spacing: -0.3px;
   margin: 0;
+}
+
+.section-tabs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #f1f5f9;
+  padding: 5px;
+  border-radius: 12px;
+}
+
+.tab-btn {
+  border: none;
+  background: transparent;
+  color: #64748b;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 9px 18px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.tab-btn:hover { color: #0f172a; }
+
+.tab-btn.active {
+  background: #fff;
+  color: #0f172a;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06);
 }
 
 .movies-section-actions {
@@ -1528,6 +1563,32 @@ body.images-blurred img {
 .album-upload-btn { color: #6366f1; }
 .album-upload-btn:hover { background: #eef2ff; }
 
+.album-download-btn { color: #059669; }
+.album-download-btn:hover { background: #ecfdf5; }
+.album-download-btn:disabled { color: #94a3b8; cursor: not-allowed; opacity: 0.6; }
+.album-download-btn:disabled:hover { background: rgba(255, 255, 255, 0.9); transform: none; }
+
+.album-goto-btn { color: #d97706; }
+.album-goto-btn:hover { background: #fffbeb; }
+
+.album-movie-label {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  right: 8px;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(8px);
+  color: white;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 2px 10px;
+  border-radius: 6px;
+  pointer-events: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .album-original-btn {
   color: #0f766e;
   background: rgba(255, 255, 255, 0.95);
@@ -1726,6 +1787,31 @@ body.images-blurred img {
 .lightbox-fav-btn:hover { background: rgba(255, 255, 255, 0.2); transform: scale(1.05); }
 .lightbox-fav-btn:active { transform: scale(0.95); }
 .lightbox-fav-btn.is-favorite { background: #fce4ec; color: #e11d48; border-color: #fce4ec; }
+
+.lightbox-goto-album-btn {
+  position: absolute;
+  bottom: 24px;
+  left: 24px;
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: white;
+  padding: 10px 18px;
+  border-radius: 30px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s;
+  z-index: 10;
+  font-family: inherit;
+  white-space: nowrap;
+}
+
+.lightbox-goto-album-btn:hover { background: rgba(255, 255, 255, 0.2); transform: scale(1.03); }
+.lightbox-goto-album-btn:active { transform: scale(0.97); }
 
 .lightbox-nav {
   position: absolute;
