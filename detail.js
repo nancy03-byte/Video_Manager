@@ -1,22 +1,3 @@
-// ── Shared Cache ─────────────────────────────────────────────────────
-const DETAIL_CACHE = {
-  data: null,
-  timestamp: 0,
-  staleAge: 30_000,
-};
-
-function getDetailCached() {
-  if (DETAIL_CACHE.data && (Date.now() - DETAIL_CACHE.timestamp) < DETAIL_CACHE.staleAge) {
-    return DETAIL_CACHE.data;
-  }
-  return null;
-}
-
-function setDetailCache(data) {
-  DETAIL_CACHE.data = data;
-  DETAIL_CACHE.timestamp = Date.now();
-}
-
 function debounce(fn, delay) {
   let timer;
   return function (...args) {
@@ -1299,6 +1280,31 @@ function openInNewTab(url) {
     window.open(url, '_blank');
 }
 
+function isDirectVideoUrl(url) {
+    return /\.(?:mp4|webm|ogg|m3u8)(?:[?#].*)?$/i.test(url || '');
+}
+
+async function resolveVideoUrls(videoUrlValue) {
+    const urls = splitCommaSeparated(videoUrlValue);
+    const resolvedUrls = [];
+
+    for (const url of urls) {
+        if (isDirectVideoUrl(url)) {
+            resolvedUrls.push(url);
+            continue;
+        }
+
+        const response = await fetch(`${API_URL}/resolve-video?url=${encodeURIComponent(url)}`);
+        const result = await response.json();
+        if (!response.ok || !result.videoUrl) {
+            throw new Error(result.error || `No playable video source found for ${url}`);
+        }
+        resolvedUrls.push(result.videoUrl);
+    }
+
+    return resolvedUrls.join(',');
+}
+
 // Open add movie modal
 function openAddMovieModal() {
     editingMovieIndex = null;
@@ -1359,12 +1365,19 @@ async function handleSaveMovie(e) {
     addTrailingComma(videoUrlInput);
     addTrailingComma(movieImagesInput);
 
-    const videoUrl = videoUrlInput.value.trim();
+    let videoUrl;
     const movieImages = movieImagesInput.value.trim();
     const starNames = getMovieStarNames(movieStarsInput.value);
 
     if (!videoTitle) { alert('Video Title is required!'); return; }
     if (!siteName) { alert('Site Name is required!'); return; }
+
+    try {
+        videoUrl = await resolveVideoUrls(videoUrlInput.value.trim());
+    } catch (error) {
+        alert(`Could not resolve video URL: ${error.message}`);
+        return;
+    }
 
     const albumUrl = albumUrlInput.value.trim();
     let albumImagesString = isEditing ? (existingMovie?.albumImages || '') : '';

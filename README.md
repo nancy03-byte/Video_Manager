@@ -1,6 +1,6 @@
 # Star Library Application
 
-A web application to manage a library of stars (actors/actresses) and their movies with filtering and search capabilities.
+A small vanilla JavaScript application for managing stars, movies, favorite movies, and image albums.
 
 ## Features
 
@@ -10,6 +10,7 @@ A web application to manage a library of stars (actors/actresses) and their movi
 - **Filter by Multiple Selection**: Use checkboxes to select multiple stars
 - **Add New Star**: Click "Add Star" button to add new stars with name and picture URL
 - **Reset Filters**: Clear all filters to view all stars
+- **Favorite Movies**: View movies marked as favorites across all stars
 
 ### Star Detail Page (`detail.html`)
 - **Star Information**: View detailed information about selected star
@@ -17,20 +18,31 @@ A web application to manage a library of stars (actors/actresses) and their movi
 - **Video Preview**: YouTube video thumbnails (if video is from YouTube)
 - **Watch Links**: Direct links to watch videos on their respective sites
 - **Add Movie**: Add new movies with video title, site name, and video URL
+- **Album URL**: Fetch image URLs from an optional album page
+- **Favorite Movie**: Mark or unmark a movie as a favorite
 - **Delete Movie**: Remove movies from the list
+
+### Album Page (`album/album.html`)
+- **Album Viewer**: Browse, edit, and download album links
+- **Image Favorites**: Mark individual album images as favorites
+- **Smart Loading**: Cache album images locally with IndexedDB
 
 ## Project Structure
 
 ```
-├── index.html          # Home page
-├── detail.html         # Star detail page
-├── script.js           # Home page logic
-├── detail.js           # Detail page logic
-├── styles.css          # All styling
-├── server.js           # Backend server (Node.js/Express)
-├── package.json        # Project dependencies
-├── data.json           # Data storage file
-└── README.md           # This file
+├── index.html          # Home page markup
+├── script.js           # Home page behavior
+├── detail.html         # Star detail markup
+├── detail.js           # Star and movie behavior
+├── album/              # Album page markup, behavior, and styles
+├── styles.css          # Shared page styles
+├── image-loader.js     # Shared image loading and URL helpers
+├── album-store.js      # IndexedDB image cache
+├── server.js           # Express API and static file server
+├── data.json           # Local seed data
+├── migrate.js          # Optional MongoDB migration script
+├── .env.example        # Environment variable template
+└── README.md           # Project documentation
 ```
 
 ## Setup & Installation
@@ -42,7 +54,7 @@ A web application to manage a library of stars (actors/actresses) and their movi
 
 1. **Navigate to project folder:**
    ```bash
-   cd c:\Users\mayur\Desktop\Video-Manager\Video_Manager
+   cd c:\Users\mayur\Desktop\Video-Manager\video manager\Video_Manager
    ```
 
 2. **Install dependencies:**
@@ -59,7 +71,7 @@ A web application to manage a library of stars (actors/actresses) and their movi
 
 4. **Open the app:**
    - Open your browser and go to `http://localhost:3000`
-   - The app will now automatically save all changes to `data.json`
+   - Configure `MONGODB_URI` in a local `.env` file before making changes.
 
 ## How to Use
 
@@ -68,7 +80,7 @@ A web application to manage a library of stars (actors/actresses) and their movi
 1. Click the "**+ Add Star**" button in the top-right corner
 2. Enter the star's name and picture URL
 3. Click "Add Star" to save
-4. ✅ Changes are **automatically saved** to `data.json`
+4. Changes are saved to MongoDB when it is available.
 
 ### Filtering Stars
 
@@ -88,27 +100,28 @@ A web application to manage a library of stars (actors/actresses) and their movi
    - **Video Title**: Name of the movie/video
    - **Site Name**: Where the video is hosted (e.g., YouTube, Netflix)
    - **Video URL**: Direct link to the video
+   - **Album URL**: Optional page URL used to extract album image links
 3. Click "Add Movie" to save
-4. ✅ Changes are **automatically saved** to `data.json`
+4. Changes are saved to MongoDB when it is available.
 
 ### Deleting Movies
 
 1. On the star detail page, click the "**Delete**" button on any movie card
 2. Confirm the deletion
-3. ✅ Changes are **automatically saved** to `data.json`
+3. Changes are saved to MongoDB when it is available.
 
 ## Data Storage
 
-### With Server Running ⭐ (Recommended)
-- All data is saved directly to **`data.json`**
+### With MongoDB configured (Recommended)
+- All data is saved directly to MongoDB.
 - Data persists between sessions
-- No additional configuration needed
+- Set `MONGODB_URI` in `.env`.
 
-### Without Server Running (Fallback)
+### Without MongoDB (Fallback)
 - Data is saved to **browser's localStorage**
 - Data persists only in that browser
 - Data is lost if you clear browser data
-- Changes are **NOT** saved to `data.json`
+- Changes are not synchronized to MongoDB
 
 ## Starting & Stopping the Server
 
@@ -120,18 +133,11 @@ npm start
 ### Stop Server:
 Press `Ctrl + C` in the terminal
 
-## Sample Data
-
-The application comes with 3 default stars in `data.json`:
-- Tom Hanks (with 2 movies)
-- Meryl Streep
-- Leonardo DiCaprio (with 1 movie)
-
 ## Technologies Used
 
 - **Frontend**: HTML5, CSS3, Vanilla JavaScript
 - **Backend**: Node.js with Express.js
-- **Data Storage**: JSON file
+- **Data Storage**: MongoDB with localStorage fallback
 - **API Communication**: Fetch API
 
 ## Features Highlights
@@ -140,7 +146,7 @@ The application comes with 3 default stars in `data.json`:
 🎨 **Beautiful UI**: Modern gradient background with smooth animations
 🔍 **Advanced Filtering**: Combine dropdown and checkbox filters
 📱 **Video Integration**: YouTube thumbnail preview support
-💾 **Automatic Saving**: Data automatically saved to `data.json`
+💾 **Automatic Saving**: Data automatically saved to MongoDB when configured
 🚀 **Fallback Mode**: Works without server (uses localStorage)
 
 ## Troubleshooting
@@ -148,7 +154,7 @@ The application comes with 3 default stars in `data.json`:
 ### Server won't start
 ```bash
 # Make sure you're in the correct directory
-cd c:\Users\mayur\Desktop\Video-Manager\Video_Manager
+cd c:\Users\mayur\Desktop\Video-Manager\video manager\Video_Manager
 
 # Reinstall dependencies
 npm install
@@ -163,14 +169,14 @@ npm start
 # Or kill the process using port 3000
 ```
 
-### Changes not saving to data.json
-- Make sure the server is running (`npm start`)
+### Changes not saving
+- Make sure MongoDB is reachable and `MONGODB_URI` is set in `.env`.
 - Check the browser console for errors (F12 → Console)
-- If server isn't running, changes save to localStorage only
+- If MongoDB is unavailable, changes save to localStorage only
 
 ### Movies not showing
-- Make sure `data.json` exists in the project folder
-- Restart the server after manual edits to `data.json`
+- Make sure MongoDB is reachable
+- Restart the server after changing environment variables
 
 ## Browser Compatibility
 

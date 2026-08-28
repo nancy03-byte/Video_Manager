@@ -689,6 +689,85 @@ app.get('/api/proxy', async (req, res) => {
   }
 });
 
+app.get('/api/resolve-video', async (req, res) => {
+  const { url } = req.query;
+  let pageUrl;
+  try {
+    pageUrl = new URL(url);
+    if (pageUrl.protocol !== 'http:' && pageUrl.protocol !== 'https:') {
+      throw new Error('Unsupported protocol');
+    }
+  } catch (_) {
+    return res.status(400).json({ error: 'Invalid video page URL' });
+  }
+
+  try {
+    const upstream = await fetch(pageUrl.toString(), {
+      redirect: 'follow',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Referer': `${pageUrl.protocol}//${pageUrl.host}/`,
+      },
+    });
+    if (!upstream.ok) {
+      return res.status(upstream.status).json({ error: `Video page returned HTTP ${upstream.status}` });
+    }
+
+    const html = await upstream.text();
+    const videoUrl = chooseBestVideoUrl(extractVideoUrls(html, pageUrl.toString()));
+    if (!videoUrl) {
+      return res.status(404).json({ error: 'No playable video source found on the page' });
+    }
+    res.json({ videoUrl });
+  } catch (error) {
+    console.error('Error resolving video page:', error);
+    res.status(502).json({ error: 'Failed to fetch video page' });
+  }
+});
+
+function extractVideoUrls(html, pageUrl) {
+  const candidates = new Set();
+  const addCandidate = (value) => {
+    if (!value) return;
+    const cleaned = value.replace(/\\(["'])/g, '$1').replace(/\\\//g, '/');
+    try {
+      const absoluteUrl = new URL(cleaned, pageUrl).toString();
+      if (/\.(?:mp4|webm|ogg|m3u8)(?:[?#].*)?$/i.test(absoluteUrl)) {
+        candidates.add(absoluteUrl);
+      }
+    } catch (_) {
+      // Ignore malformed values embedded in page scripts.
+    }
+  };
+
+  const sourceAttributePattern = /<(?:source|video)[^>]+(?:src|data-src|data-video)=["']([^"']+)["'][^>]*>/gi;
+  let match;
+  while ((match = sourceAttributePattern.exec(html)) !== null) addCandidate(match[1]);
+
+  const quotedUrlPattern = /["']((?:https?:)?\\?\/\\?\/[^"']+\.(?:mp4|webm|ogg|m3u8)(?:\?[^"']*)?)["']/gi;
+  while ((match = quotedUrlPattern.exec(html)) !== null) addCandidate(match[1]);
+
+  const plainUrlPattern = /https?:\/\/[^"'\\s<>]+\.(?:mp4|webm|ogg|m3u8)(?:\?[^"'\\s<>]*)?/gi;
+  while ((match = plainUrlPattern.exec(html)) !== null) addCandidate(match[0]);
+
+  return Array.from(candidates);
+}
+
+function chooseBestVideoUrl(urls) {
+  return urls.sort((left, right) => {
+    const score = (url) => {
+      if (/(?:1080p|1080|1920x1080|fullhd)/i.test(url)) return 4;
+      if (/(?:720p|720|1280x720|hd)/i.test(url)) return 3;
+      if (/(?:480p|480|854x480)/i.test(url)) return 2;
+      if (/(?:360p|360|640x360)/i.test(url)) return 1;
+      return 0;
+    };
+    return score(right) - score(left);
+  })[0] || null;
+}
+
 // Streams a remote image back to the browser with a Content-Disposition
 // header so the browser downloads it directly instead of navigating to it.
 // Fetching server-side sidesteps browser CORS restrictions on the image host.
