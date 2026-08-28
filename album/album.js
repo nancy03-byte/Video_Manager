@@ -644,7 +644,19 @@ function toggleFavorite(index) {
     }
 
     saveAlbumData();
-    renderGrid();
+    updateFavoriteButton(index);
+    renderFavoritesStrip();
+}
+
+function updateFavoriteButton(index) {
+    const item = albumGrid.querySelector(`.album-item[data-index="${index}"]`);
+    const favBtn = item?.querySelector('.album-fav-btn');
+    if (!favBtn) return;
+
+    const isFavorite = favoriteImages.includes(images[index]);
+    favBtn.classList.toggle('is-favorite', isFavorite);
+    favBtn.innerHTML = isFavorite ? '❤️' : '🤍';
+    favBtn.title = isFavorite ? 'Remove from favorites' : 'Add to favorites';
 }
 
 // ── Delete Image ──────────────────────────────────────────────────────────
