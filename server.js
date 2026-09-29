@@ -103,8 +103,10 @@ const movieSchema = new mongoose.Schema({
   videoUrl: { type: String, default: '' },
   previewVideoUrl: { type: String, default: '' },
   images: { type: String, default: '' },
+  albumUrl: { type: String, default: '' },
   albumImages: { type: String, default: '' },
   favoriteImages: { type: String, default: '' },
+  isFavorite: { type: Boolean, default: false },
   starNames: [String],
 });
 
@@ -416,8 +418,10 @@ app.post('/api/stars/:starId/movies', requireDB, async (req, res) => {
       videoUrl: req.body.videoUrl || '',
       previewVideoUrl: req.body.previewVideoUrl || '',
       images: req.body.images || '',
+      albumUrl: req.body.albumUrl || '',
       albumImages: req.body.albumImages || '',
       favoriteImages: req.body.favoriteImages || '',
+      isFavorite: req.body.isFavorite === true || req.body.isFavorite === 'true',
       starNames: [star.name],
     };
 
@@ -510,6 +514,10 @@ app.put('/api/stars/:starId/movies/:movieIndex', requireDB, async (req, res) => 
       videoUrl: req.body.videoUrl || '',
       previewVideoUrl: req.body.previewVideoUrl || '',
       images: req.body.images || '',
+      albumUrl:
+        req.body.albumUrl !== undefined
+          ? String(req.body.albumUrl)
+          : star.movies[movieIndex].albumUrl || '',
       albumImages:
         req.body.albumImages !== undefined
           ? String(req.body.albumImages)
@@ -518,6 +526,10 @@ app.put('/api/stars/:starId/movies/:movieIndex', requireDB, async (req, res) => 
         req.body.favoriteImages !== undefined
           ? String(req.body.favoriteImages)
           : star.movies[movieIndex].favoriteImages || '',
+      isFavorite:
+        req.body.isFavorite !== undefined
+          ? req.body.isFavorite === true || req.body.isFavorite === 'true'
+          : Boolean(star.movies[movieIndex].isFavorite),
       starNames: [star.name],
     };
 
@@ -644,6 +656,117 @@ app.delete(
 /* -------------------------------------------------------------------------- */
 /*                          Image Download Proxy                              */
 /* -------------------------------------------------------------------------- */
+
+app.get('/api/proxy', async (req, res) => {
+  const { url } = req.query;
+  let parsedUrl;
+  try {
+    parsedUrl = new URL(url);
+    if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') throw new Error('Unsupported protocol');
+  } catch (_) {
+    return res.status(400).json({ error: 'Invalid url' });
+  }
+
+  try {
+    const upstream = await fetch(parsedUrl.toString(), {
+      redirect: 'follow',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Referer': `${parsedUrl.protocol}//${parsedUrl.host}/`,
+      },
+    });
+    if (!upstream.ok) {
+      return res.status(upstream.status).json({
+        error: `Album page returned HTTP ${upstream.status}`,
+      });
+    }
+    res.type('html').send(await upstream.text());
+  } catch (error) {
+    console.error('Error proxying album page:', error);
+    res.status(502).json({ error: 'Failed to fetch album page' });
+  }
+});
+
+app.get('/api/resolve-video', async (req, res) => {
+  const { url } = req.query;
+  let pageUrl;
+  try {
+    pageUrl = new URL(url);
+    if (pageUrl.protocol !== 'http:' && pageUrl.protocol !== 'https:') {
+      throw new Error('Unsupported protocol');
+    }
+  } catch (_) {
+    return res.status(400).json({ error: 'Invalid video page URL' });
+  }
+
+  try {
+    const upstream = await fetch(pageUrl.toString(), {
+      redirect: 'follow',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Referer': `${pageUrl.protocol}//${pageUrl.host}/`,
+      },
+    });
+    if (!upstream.ok) {
+      return res.status(upstream.status).json({ error: `Video page returned HTTP ${upstream.status}` });
+    }
+
+    const html = await upstream.text();
+    const videoUrl = chooseBestVideoUrl(extractVideoUrls(html, pageUrl.toString()));
+    if (!videoUrl) {
+      return res.status(404).json({ error: 'No playable video source found on the page' });
+    }
+    res.json({ videoUrl });
+  } catch (error) {
+    console.error('Error resolving video page:', error);
+    res.status(502).json({ error: 'Failed to fetch video page' });
+  }
+});
+
+function extractVideoUrls(html, pageUrl) {
+  const candidates = new Set();
+  const addCandidate = (value) => {
+    if (!value) return;
+    const cleaned = value.replace(/\\(["'])/g, '$1').replace(/\\\//g, '/');
+    try {
+      const absoluteUrl = new URL(cleaned, pageUrl).toString();
+      if (/\.(?:mp4|webm|ogg|m3u8)(?:[?#].*)?$/i.test(absoluteUrl)) {
+        candidates.add(absoluteUrl);
+      }
+    } catch (_) {
+      // Ignore malformed values embedded in page scripts.
+    }
+  };
+
+  const sourceAttributePattern = /<(?:source|video)[^>]+(?:src|data-src|data-video)=["']([^"']+)["'][^>]*>/gi;
+  let match;
+  while ((match = sourceAttributePattern.exec(html)) !== null) addCandidate(match[1]);
+
+  const quotedUrlPattern = /["']((?:https?:)?\\?\/\\?\/[^"']+\.(?:mp4|webm|ogg|m3u8)(?:\?[^"']*)?)["']/gi;
+  while ((match = quotedUrlPattern.exec(html)) !== null) addCandidate(match[1]);
+
+  const plainUrlPattern = /https?:\/\/[^"'\\s<>]+\.(?:mp4|webm|ogg|m3u8)(?:\?[^"'\\s<>]*)?/gi;
+  while ((match = plainUrlPattern.exec(html)) !== null) addCandidate(match[0]);
+
+  return Array.from(candidates);
+}
+
+function chooseBestVideoUrl(urls) {
+  return urls.sort((left, right) => {
+    const score = (url) => {
+      if (/(?:1080p|1080|1920x1080|fullhd)/i.test(url)) return 4;
+      if (/(?:720p|720|1280x720|hd)/i.test(url)) return 3;
+      if (/(?:480p|480|854x480)/i.test(url)) return 2;
+      if (/(?:360p|360|640x360)/i.test(url)) return 1;
+      return 0;
+    };
+    return score(right) - score(left);
+  })[0] || null;
+}
 
 // Streams a remote image back to the browser with a Content-Disposition
 // header so the browser downloads it directly instead of navigating to it.

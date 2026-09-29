@@ -1,22 +1,3 @@
-// ── Shared Cache ─────────────────────────────────────────────────────
-const DETAIL_CACHE = {
-  data: null,
-  timestamp: 0,
-  staleAge: 30_000,
-};
-
-function getDetailCached() {
-  if (DETAIL_CACHE.data && (Date.now() - DETAIL_CACHE.timestamp) < DETAIL_CACHE.staleAge) {
-    return DETAIL_CACHE.data;
-  }
-  return null;
-}
-
-function setDetailCache(data) {
-  DETAIL_CACHE.data = data;
-  DETAIL_CACHE.timestamp = Date.now();
-}
-
 function debounce(fn, delay) {
   let timer;
   return function (...args) {
@@ -51,6 +32,7 @@ const starTitle = document.getElementById('starTitle');
 const movieCount = document.getElementById('movieCount');
 const toggleSlideshowsBtn = document.getElementById('toggleSlideshowsBtn');
 const movieColumnsSelect = document.getElementById('movieColumnsSelect');
+const movieImagesToggleOriginalBtn = document.getElementById('movieImagesToggleOriginalBtn');
 const moviesGrid = document.getElementById('moviesGrid');
 
 // Images tab DOM
@@ -72,14 +54,7 @@ const imagesLightboxCounter = document.getElementById('imagesLightboxCounter');
 const imagesLightboxFavBtn = document.getElementById('imagesLightboxFavBtn');
 const imagesLightboxGotoBtn = document.getElementById('imagesLightboxGotoBtn');
 
-// Album config DOM
-const albumConfigDetails = document.getElementById('albumConfigDetails');
-const albumSourceHtml = document.getElementById('albumSourceHtml');
-const albumBaseUrl = document.getElementById('albumBaseUrl');
-const albumConfigPreview = document.getElementById('albumConfigPreview');
-const albumConfigCount = document.getElementById('albumConfigCount');
-const albumConfigResult = document.getElementById('albumConfigResult');
-const albumConfigPreviewBtn = document.getElementById('albumConfigPreviewBtn');
+const albumUrlInput = document.getElementById('albumUrl');
 
 // Global state
 let currentStar = null;
@@ -89,6 +64,7 @@ let slideShowIntervals = {};
 let areSlideshowsPaused = false;
 let editingMovieIndex = null;
 let movieSiteFilterDropdown = null;
+let movieImagesShowOriginal = false;
 
 // Images tab state
 let currentTab = 'movies';
@@ -145,15 +121,17 @@ function setupEventListeners() {
     resetMovieFiltersBtn.addEventListener('click', resetMovieFilters);
     toggleSlideshowsBtn.addEventListener('click', toggleAllSlideshows);
     movieColumnsSelect.addEventListener('change', updateMovieColumns);
+    movieImagesToggleOriginalBtn.addEventListener('click', async () => {
+        movieImagesShowOriginal = !movieImagesShowOriginal;
+        movieImagesToggleOriginalBtn.textContent = movieImagesShowOriginal
+            ? '🖼 Original Images'
+            : '🖼 Preview Images';
+        await refreshMovieThumbnailImages();
+    });
     window.addEventListener('click', (e) => {
         if (e.target === addMovieModal) closeMovieModalDialog();
         if (e.target === editStarModal) closeEditStarModalDialog();
     });
-
-    // Album config events
-    albumSourceHtml.addEventListener('input', onAlbumConfigChange);
-    albumBaseUrl.addEventListener('input', onAlbumConfigChange);
-    albumConfigPreviewBtn.addEventListener('click', handleAlbumConfigPreview);
 
     // Tabs
     moviesTabBtn.addEventListener('click', () => switchTab('movies'));
@@ -188,56 +166,22 @@ function setupEventListeners() {
     document.addEventListener('keydown', handleImagesLightboxKeydown);
 }
 
-function onAlbumConfigChange() {
-    // If source has content and base URL is empty, highlight the base URL field
-    const source = albumSourceHtml.value.trim();
-    const base = albumBaseUrl.value.trim();
-    if (source && !base) {
-        albumBaseUrl.classList.add('field-highlight-required');
-    } else {
-        albumBaseUrl.classList.remove('field-highlight-required');
+async function extractAlbumImages(albumUrl) {
+    const response = await fetch(`${API_URL}/proxy?url=${encodeURIComponent(albumUrl)}`);
+    if (!response.ok) {
+        let errorMessage = `Album page returned HTTP ${response.status}`;
+        try {
+            const errorBody = await response.json();
+            errorMessage = errorBody.error || errorMessage;
+        } catch (_) {
+            // Keep the HTTP status when the proxy response is not JSON.
+        }
+        throw new Error(errorMessage);
     }
-    // Hide preview when input changes
-    albumConfigPreview.hidden = true;
-}
-
-function handleAlbumConfigPreview() {
-    const sourceHtml = albumSourceHtml.value;
-    const baseUrl = albumBaseUrl.value.trim();
-
-    if (!sourceHtml) {
-        alert('Please paste the source HTML first.');
-        return;
-    }
-    if (!baseUrl) {
-        alert('Target Base URL is required when Source HTML is provided.');
-        albumBaseUrl.focus();
-        return;
-    }
-
-    const urls = parseAlbumImages(sourceHtml, baseUrl);
-    if (urls.length === 0) {
-        alert('No image IDs found in the HTML. Make sure it contains href="https://imx.to/i/XXXXX" patterns.');
-        albumConfigPreview.hidden = true;
-        return;
-    }
-
-    albumConfigCount.textContent = urls.length;
-    albumConfigResult.textContent = urls.join(',\n');
-    albumConfigPreview.hidden = false;
-}
-
-function parseAlbumImages(sourceHtml, baseUrl) {
-    if (!sourceHtml || !baseUrl) return [];
-    const ids = [];
-    const regex = /href="https:\/\/imx\.to\/i\/([a-zA-Z0-9]+)"/g;
-    let match;
-    while ((match = regex.exec(sourceHtml)) !== null) {
-        const id = match[1];
-        const baseNormalized = baseUrl.endsWith('/') ? baseUrl : baseUrl + '/';
-        ids.push(`${baseNormalized}${id}.jpg`);
-    }
-    return ids;
+    const html = await response.text();
+    return extractImageUrlsFromHtml(html)
+        .filter((url) => /^https?:\/\//i.test(url))
+        .map((url) => normalizeOriginalCandidate(url));
 }
 
 function setupMovieFilterDropdown() {
@@ -1035,7 +979,7 @@ function createThumbnailHTML(movieIndex, resolved, previewUrl) {
     if (resolved.type === 'images') {
         const slidesHTML = resolved.urls.map((url, i) => `
             <div class="slide${i === 0 ? ' active' : ''}" style="opacity: ${i === 0 ? '1' : '0'};">
-                <img src="${url}" alt="Movie image ${i + 1}">
+                <img src="${url}" data-preview-url="${url}" alt="Movie image ${i + 1}">
             </div>
         `).join('');
 
@@ -1072,6 +1016,29 @@ function createThumbnailHTML(movieIndex, resolved, previewUrl) {
             <img src="${imgSrc}" alt="Thumbnail" style="width:100%;height:100%;object-fit:cover;">
         </div>
     `;
+}
+
+async function refreshMovieThumbnailImages() {
+    const images = moviesGrid.querySelectorAll('.movie-thumbnail img[data-preview-url]');
+
+    for (const image of images) {
+        const previewUrl = image.dataset.previewUrl;
+        if (!movieImagesShowOriginal) {
+            image.src = previewUrl;
+            continue;
+        }
+
+        try {
+            let originalUrl = imagesOriginalUrlCache.get(previewUrl);
+            if (!originalUrl) {
+                originalUrl = await resolveOriginalImageUrl(previewUrl);
+                imagesOriginalUrlCache.set(previewUrl, originalUrl);
+            }
+            image.src = originalUrl || previewUrl;
+        } catch {
+            image.src = previewUrl;
+        }
+    }
 }
 
 function createFixedButtonRow(className, buttonsHTML, placeholderLabel) {
@@ -1153,6 +1120,7 @@ async function renderMovies() {
         // Row 4: Edit + Delete
         const editDeleteRowHTML = `
             <div class="movie-buttons-row edit-delete-row">
+                <button class="btn btn-favorite ${movie.isFavorite ? 'is-favorite' : ''}" data-favorite-index="${movieIndex}">${movie.isFavorite ? '❤️ Favorite' : '🤍 Favorite'}</button>
                 <button class="btn-edit" data-edit-index="${movieIndex}">Edit</button>
                 <button class="btn-delete-movie" data-delete-index="${movieIndex}">Delete</button>
             </div>
@@ -1195,6 +1163,7 @@ async function renderMovies() {
         movieCard.querySelector('[data-album-index]')?.addEventListener('click', () => openAlbum(movieIndex));
         movieCard.querySelector('[data-edit-index]')?.addEventListener('click', () => editMovie(movieIndex));
         movieCard.querySelector('[data-delete-index]')?.addEventListener('click', () => deleteMovie(movieIndex));
+        movieCard.querySelector('[data-favorite-index]')?.addEventListener('click', () => toggleMovieFavorite(movieIndex));
 
         if (hasImages && resolved.urls.length > 1) {
             setTimeout(() => startSlideshow(movieIndex), 100);
@@ -1205,6 +1174,28 @@ async function renderMovies() {
 
     const cards = await Promise.all(cardPromises);
     cards.forEach(card => moviesGrid.appendChild(card));
+    if (movieImagesShowOriginal) await refreshMovieThumbnailImages();
+}
+
+async function toggleMovieFavorite(index) {
+    const movie = currentStar?.movies?.[index];
+    if (!movie) return;
+    const wasFavorite = movie.isFavorite === true || movie.isFavorite === 'true';
+    movie.isFavorite = !wasFavorite;
+    saveData();
+
+    try {
+        const response = await fetch(`${API_URL}/stars/${currentStar.id}/movies/${index}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(movie)
+        });
+        if (!response.ok) throw new Error('Server error');
+    } catch (_) {
+        // localStorage remains the fallback when the server is unavailable
+    }
+
+    applyMovieFilters();
 }
 
 function startSlideshow(movieIndex) {
@@ -1289,6 +1280,31 @@ function openInNewTab(url) {
     window.open(url, '_blank');
 }
 
+function isDirectVideoUrl(url) {
+    return /\.(?:mp4|webm|ogg|m3u8)(?:[?#].*)?$/i.test(url || '');
+}
+
+async function resolveVideoUrls(videoUrlValue) {
+    const urls = splitCommaSeparated(videoUrlValue);
+    const resolvedUrls = [];
+
+    for (const url of urls) {
+        if (isDirectVideoUrl(url)) {
+            resolvedUrls.push(url);
+            continue;
+        }
+
+        const response = await fetch(`${API_URL}/resolve-video?url=${encodeURIComponent(url)}`);
+        const result = await response.json();
+        if (!response.ok || !result.videoUrl) {
+            throw new Error(result.error || `No playable video source found for ${url}`);
+        }
+        resolvedUrls.push(result.videoUrl);
+    }
+
+    return resolvedUrls.join(',');
+}
+
 // Open add movie modal
 function openAddMovieModal() {
     editingMovieIndex = null;
@@ -1301,10 +1317,7 @@ function openAddMovieModal() {
     document.getElementById('videoUrl').value = '';
     document.getElementById('previewVideoUrl').value = '';
     document.getElementById('movieImages').value = '';
-    albumSourceHtml.value = '';
-    albumBaseUrl.value = '';
-    albumConfigPreview.hidden = true;
-    albumConfigDetails.removeAttribute('open');
+    albumUrlInput.value = '';
     addMovieModal.classList.add('show');
 }
 
@@ -1329,7 +1342,6 @@ function closeMovieModalDialog() {
     editingMovieIndex = null;
     document.getElementById('movieStars').value = '';
     movieModalTitle.textContent = 'Add New Movie';
-    albumConfigPreview.hidden = true;
 }
 
 function closeEditStarModalDialog() {
@@ -1353,35 +1365,35 @@ async function handleSaveMovie(e) {
     addTrailingComma(videoUrlInput);
     addTrailingComma(movieImagesInput);
 
-    const videoUrl = videoUrlInput.value.trim();
+    let videoUrl;
     const movieImages = movieImagesInput.value.trim();
     const starNames = getMovieStarNames(movieStarsInput.value);
 
     if (!videoTitle) { alert('Video Title is required!'); return; }
     if (!siteName) { alert('Site Name is required!'); return; }
 
-    // ── Album processing ───────────────────────────────────────────────
-    const sourceHtml = albumSourceHtml.value;
-    const baseUrl = albumBaseUrl.value.trim();
-
-    let albumImagesString = '';
-    let hasAlbumConfig = false;
-
-    if (sourceHtml && baseUrl) {
-        const parsed = parseAlbumImages(sourceHtml, baseUrl);
-        if (parsed.length > 0) {
-            albumImagesString = parsed.join(',');
-            hasAlbumConfig = true;
-        }
-    } else if (sourceHtml && !baseUrl) {
-        alert('Target Base URL is required when Source HTML is provided.');
-        albumBaseUrl.focus();
+    try {
+        videoUrl = await resolveVideoUrls(videoUrlInput.value.trim());
+    } catch (error) {
+        alert(`Could not resolve video URL: ${error.message}`);
         return;
     }
 
-    // If both empty but this is a movie edit, preserve existing albumImages
-    if (!sourceHtml && !baseUrl && isEditing && currentStar?.movies?.[editingMovieIndex]?.albumImages) {
-        albumImagesString = currentStar.movies[editingMovieIndex].albumImages;
+    const albumUrl = albumUrlInput.value.trim();
+    let albumImagesString = isEditing ? (existingMovie?.albumImages || '') : '';
+
+    if (albumUrl) {
+        try {
+            const albumImages = await extractAlbumImages(albumUrl);
+            if (albumImages.length === 0) {
+                alert('No image URLs were found on the album page.');
+                return;
+            }
+            albumImagesString = albumImages.join(',');
+        } catch (error) {
+            alert(`Could not load the album URL: ${error.message}`);
+            return;
+        }
     }
 
     const moviePayload = {
@@ -1391,8 +1403,12 @@ async function handleSaveMovie(e) {
         videoUrl,
         previewVideoUrl,
         images: movieImages,
+        albumUrl,
         albumImages: albumImagesString,
         favoriteImages: isEditing ? (existingMovie?.favoriteImages || '') : '',
+        isFavorite: isEditing
+            ? (existingMovie?.isFavorite === true || existingMovie?.isFavorite === 'true')
+            : false,
         starNames: isEditing ? [currentStar.name] : starNames
     };
 
@@ -1426,28 +1442,6 @@ async function handleSaveMovie(e) {
         closeMovieModalDialog();
         window.location.href = 'index.html';
         return;
-    }
-
-    // ── Redirect to album page if we just created album images ──────────
-    if (hasAlbumConfig) {
-        // Find the movie we just saved
-        const savedMovie = currentStar.movies.find(m => String(m.id) === String(moviePayload.id));
-        let savedMovieIndex = -1;
-        if (savedMovie) {
-            savedMovieIndex = currentStar.movies.indexOf(savedMovie);
-        } else {
-            // Fallback: last movie
-            savedMovieIndex = currentStar.movies.length - 1;
-        }
-
-        closeMovieModalDialog();
-
-        if (savedMovieIndex >= 0) {
-            // Update local data before redirect
-            localStorage.setItem('starsData', JSON.stringify(starsData));
-            window.location.href = `album/album.html?starId=${currentStar.id}&movieIndex=${savedMovieIndex}`;
-            return;
-        }
     }
 
     // Normal flow: just refresh the view
@@ -1501,22 +1495,10 @@ function editMovie(index) {
     document.getElementById('videoUrl').value = movie.videoUrl || '';
     document.getElementById('previewVideoUrl').value = movie.previewVideoUrl || '';
     document.getElementById('movieImages').value = movie.images || '';
+    albumUrlInput.value = movie.albumUrl || '';
     document.getElementById('movieStars').value = currentStar.name;
 
     // Pre-fill album config from existing albumImages if present
-    albumSourceHtml.value = '';
-    albumBaseUrl.value = '';
-    albumConfigPreview.hidden = true;
-    // Show the album section on edit if it had album images
-    if (movie.albumImages) {
-        albumConfigDetails.setAttribute('open', '');
-        // Show existing album image count as informational
-        const existingCount = splitCommaSeparated(movie.albumImages).length;
-        if (existingCount > 0) {
-            // We don't set the fields, but we show it as open so user knows album exists
-        }
-    }
-
     addMovieModal.classList.add('show');
 }
 

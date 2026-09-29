@@ -100,6 +100,9 @@ const favoritesStripCount = document.getElementById('favoritesStripCount');
 
 const toggleOriginalBtn = document.getElementById('toggleOriginalBtn');
 const originalUrlCache = new Map();
+const lightboxSourceCache = new Map();
+const lightboxSourcePromises = new Map();
+const lightboxImagePromises = new Map();
 // ── Init ──────────────────────────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -337,11 +340,13 @@ function normalizeAlbumEntry(value) {
     if (trimmed.startsWith('webpage:')) return trimmed;
 
     if (trimmed.includes('<a') && trimmed.includes('<img')) {
-        return extractImageUrlsFromHtml(trimmed).map((src) => src.trim()).filter(Boolean);
+        return extractImageUrlsFromHtml(trimmed)
+            .map((src) => normalizeOriginalCandidate(src.trim()))
+            .filter(Boolean);
     }
 
     const isLikelyWebpage = /^https?:\/\//i.test(trimmed) && !/\.(?:jpe?g|png|gif|webp|avif|bmp|svg)(?:[?#].*)?$/i.test(trimmed);
-    return isLikelyWebpage ? `webpage:${trimmed}` : trimmed;
+    return isLikelyWebpage ? `webpage:${trimmed}` : normalizeOriginalCandidate(trimmed);
 }
 
 function formatAlbumEntryForInput(entry) {
@@ -639,7 +644,19 @@ function toggleFavorite(index) {
     }
 
     saveAlbumData();
-    renderGrid();
+    updateFavoriteButton(index);
+    renderFavoritesStrip();
+}
+
+function updateFavoriteButton(index) {
+    const item = albumGrid.querySelector(`.album-item[data-index="${index}"]`);
+    const favBtn = item?.querySelector('.album-fav-btn');
+    if (!favBtn) return;
+
+    const isFavorite = favoriteImages.includes(images[index]);
+    favBtn.classList.toggle('is-favorite', isFavorite);
+    favBtn.innerHTML = isFavorite ? '❤️' : '🤍';
+    favBtn.title = isFavorite ? 'Remove from favorites' : 'Add to favorites';
 }
 
 // ── Delete Image ──────────────────────────────────────────────────────────
@@ -761,18 +778,7 @@ function openOriginalImageInLightbox(index) {
 
     lightboxImage.hidden = false;
     lightboxImage.alt = 'Original image';
-    lightboxImage.src = '';
-
-    resolveOriginalImageUrl(src)
-        .then((originalUrl) => {
-            if (lightboxIndex !== index) return;
-            lightboxImage.src = originalUrl || src;
-        })
-        .catch(() => {
-            if (lightboxIndex === index) {
-                lightboxImage.src = src;
-            }
-        });
+    showCachedOrPreviewLightboxImage(index, src);
 }
 
 // ── Download Original Image ─────────────────────────────────────────────
@@ -805,6 +811,58 @@ function showNextLightbox() {
     updateLightboxImage();
 }
 
+function getLightboxSource(src) {
+    if (lightboxSourceCache.has(src)) return Promise.resolve(lightboxSourceCache.get(src));
+    if (lightboxSourcePromises.has(src)) return lightboxSourcePromises.get(src);
+
+    const sourcePromise = resolveOriginalImageUrl(src)
+        .then((resolved) => {
+            const source = resolved || src;
+            lightboxSourceCache.set(src, source);
+            return source;
+        })
+        .catch(() => {
+            lightboxSourceCache.set(src, src);
+            return src;
+        })
+        .finally(() => lightboxSourcePromises.delete(src));
+
+    lightboxSourcePromises.set(src, sourcePromise);
+    return sourcePromise;
+}
+
+function preloadLightboxImage(index) {
+    if (index < 0 || index >= images.length || isWebpageEntry(images[index])) return;
+    const src = getEntryValue(images[index]);
+    if (lightboxImagePromises.has(src)) return;
+
+    const imagePromise = getLightboxSource(src).then((source) => new Promise((resolve) => {
+        const image = new Image();
+        image.onload = () => {
+            if (typeof image.decode === 'function') {
+                image.decode().catch(() => {}).finally(() => resolve());
+            } else {
+                resolve();
+            }
+        };
+        image.onerror = () => resolve();
+        image.src = source;
+    }));
+    lightboxImagePromises.set(src, imagePromise);
+}
+
+function showCachedOrPreviewLightboxImage(index, src) {
+    const cachedSource = lightboxSourceCache.get(src);
+    lightboxImage.src = cachedSource || src;
+    getLightboxSource(src).then((source) => {
+        if (lightboxIndex === index && lightboxImage.src !== source) {
+            lightboxImage.src = source;
+        }
+        preloadLightboxImage((index - 1 + images.length) % images.length);
+        preloadLightboxImage((index + 1) % images.length);
+    });
+}
+
 function updateLightboxImage() {
     if (lightboxIndex < 0 || lightboxIndex >= images.length) return;
     const index = lightboxIndex;
@@ -821,18 +879,7 @@ function updateLightboxImage() {
         lightboxFrame.hidden = true;
         lightboxFrame.src = '';
         lightboxImage.alt = `Image ${index + 1}`;
-        lightboxImage.src = '';
-
-        resolveOriginalImageUrl(src)
-            .then((originalUrl) => {
-                if (lightboxIndex !== index) return;
-                lightboxImage.src = originalUrl || src;
-            })
-            .catch(() => {
-                if (lightboxIndex === index) {
-                    lightboxImage.src = src;
-                }
-            });
+        showCachedOrPreviewLightboxImage(index, src);
     }
     refreshLightboxCounter();
     updateLightboxFavButton();

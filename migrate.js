@@ -38,6 +38,10 @@ const movieSchema = new mongoose.Schema({
     videoUrl: { type: String, default: '' },
     previewVideoUrl: { type: String, default: '' },
     images: { type: String, default: '' },
+    albumUrl: { type: String, default: '' },
+    albumImages: { type: String, default: '' },
+    favoriteImages: { type: String, default: '' },
+    isFavorite: { type: Boolean, default: false },
     starNames: [String]
 });
 

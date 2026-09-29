@@ -12,6 +12,9 @@ const addStarModal = document.getElementById("addStarModal");
 const closeAddModal = document.getElementById("closeAddModal");
 const addStarForm = document.getElementById("addStarForm");
 const resetFiltersBtn = document.getElementById("resetFiltersBtn");
+const starsTabBtn = document.getElementById("starsTabBtn");
+const favoriteMoviesTabBtn = document.getElementById("favoriteMoviesTabBtn");
+const favoriteMoviesGrid = document.getElementById("favoriteMoviesGrid");
 
 // ── Client-side Cache ────────────────────────────────────────────────────
 const DATA_CACHE = {
@@ -44,6 +47,7 @@ function debounce(fn, delay = 300) {
 // Global data
 let starsData = [];
 let filteredStars = [];
+let currentLibraryTab = "stars";
 const filterDropdowns = { star: null, site: null };
 
 // Initialize app
@@ -77,6 +81,8 @@ function setupEventListeners() {
     addStarForm.addEventListener("submit", handleAddStar);
     searchInput.addEventListener("input", debounce(applyFilters, 250));
     resetFiltersBtn.addEventListener("click", resetFilters);
+    starsTabBtn.addEventListener("click", () => switchLibraryTab("stars"));
+    favoriteMoviesTabBtn.addEventListener("click", () => switchLibraryTab("favorites"));
 
     document.addEventListener("click", handleDocumentClick);
     window.addEventListener("click", (e) => {
@@ -235,6 +241,11 @@ async function loadData() {
         populateFilters();
         renderStars();
     }
+    if (currentLibraryTab === "favorites") renderFavoriteMovies();
+}
+
+function splitCommaSeparated(value) {
+    return value ? String(value).split(",").map((item) => item.trim()).filter(Boolean) : [];
 }
 
 // Load from localStorage fallback
@@ -458,6 +469,49 @@ function renderStars() {
         loadStarImagePriority(star.id, star.pictureUrl, starCard);
     });
     starsGrid.appendChild(fragment);
+}
+
+function switchLibraryTab(tab) {
+    currentLibraryTab = tab;
+    const showingFavorites = tab === "favorites";
+    starsTabBtn.classList.toggle("active", !showingFavorites);
+    favoriteMoviesTabBtn.classList.toggle("active", showingFavorites);
+    starsGrid.hidden = showingFavorites;
+    favoriteMoviesGrid.hidden = !showingFavorites;
+    if (showingFavorites) renderFavoriteMovies();
+}
+
+function getFavoriteMovies() {
+    return starsData.flatMap((star) => (Array.isArray(star.movies) ? star.movies : [])
+        .filter((movie) => movie.isFavorite === true || movie.isFavorite === "true")
+        .map((movie) => ({ movie, star })));
+}
+
+function renderFavoriteMovies() {
+    favoriteMoviesGrid.innerHTML = "";
+    const favoriteMovies = getFavoriteMovies();
+
+    if (favoriteMovies.length === 0) {
+        favoriteMoviesGrid.innerHTML = '<div class="empty-state" style="grid-column: 1/-1;"><p>No favorite movies yet. Mark a movie as favorite from its details page.</p></div>';
+        return;
+    }
+
+    favoriteMovies.forEach(({ movie, star }) => {
+        const card = document.createElement("article");
+        card.className = "movie-card home-movie-card";
+        const image = splitCommaSeparated(movie.favoriteImages || movie.images)[0] || star.pictureUrl || "";
+        card.innerHTML = `
+            <div class="movie-thumbnail">
+                ${image ? `<img src="${image}" alt="${movie.videoTitle || "Movie"}">` : "<span>No Preview</span>"}
+            </div>
+            <div class="movie-info">
+                <h4>${movie.videoTitle || "Untitled"}</h4>
+                <p class="home-movie-star">⭐ ${star.name}</p>
+                <button class="btn btn-submit home-movie-open" type="button">Open Movie Details</button>
+            </div>`;
+        card.querySelector(".home-movie-open").addEventListener("click", () => goToStarDetail(star.id));
+        favoriteMoviesGrid.appendChild(card);
+    });
 }
 
 /**
